@@ -1,19 +1,30 @@
 alias: Candlelight Wind Trial
-description: 'Three-minute experiment: stronger loose triplets, six-step softened dips and rebounds, broader brightness
-  wandering, and random 40–100-second wind gaps. Keeps weighted baselines and warm white; restores normal candlelight
-  afterward.'
+description: 'Timed candle-gust experiment (3 minutes by default): a mix of single deep dips and loose triplets, softened
+  recoveries, less time at the brightest baseline, and random 40–100-second calm gaps. Fixed warm white; restores normal
+  candlelight afterward.'
 icon: mdi:candle
 mode: single
 fields:
   lights:
     name: Bulbs
-    description: Choose the currently-on bulbs to test for three minutes.
+    description: Choose the currently-on bulbs to test.
     required: true
     selector:
       entity:
         filter:
           domain: light
         multiple: true
+  minutes:
+    name: Duration
+    description: Trial duration in minutes (1–60). Defaults to 3.
+    default: 3
+    selector:
+      number:
+        min: 1
+        max: 60
+        step: 1
+        mode: box
+        unit_of_measurement: minutes
 variables:
   excluded_lights: []
   pause_helpers: []
@@ -24,7 +35,7 @@ sequence:
   value_template: '{{ is_state(''script.natural_candlelight'', ''on'') and lights | default([], true) | count > 0 }}'
 - variables:
     requested: '{{ lights | default([], true) }}'
-    run_minutes: 3
+    run_minutes: '{{ [1, [60, minutes | default(3, true) | int(3)] | min] | max }}'
     only_lit: true
     night_was_on: '{{ is_state(''automation.nightly_natural_candlelight'', ''on'') }}'
     seed: '{{ (range(0, 62832) | random) / 10000 }}'
@@ -155,7 +166,7 @@ sequence:
       then:
       - variables:
           baseline_from: '{{ baseline_target }}'
-          baseline_target: '{{ [80, 80, 70, 50] | random }}'
+          baseline_target: '{{ [80, 80, 80, 70, 70, 70, 70, 50, 50, 50] | random }}'
           baseline_changed: '{{ elapsed }}'
           baseline_blend_seconds: '{{ range(15, 31) | random }}'
           baseline_next: '{{ (elapsed | float) + (baseline_blend_seconds | float) + (range(30, 181) | random) }}'
@@ -171,14 +182,20 @@ sequence:
             {% set blend = u*u*(3 - 2*u) %}
 
             {{ (baseline_from | float) + ((baseline_target | float) - (baseline_from | float))*blend }}'
+          pulse_count: '{{ [1, 3] | random }}'
       - variables:
           burst_level: '{{ burst_baseline }}'
       - repeat:
-          count: 3
+          count: '{{ pulse_count }}'
           sequence:
           - variables:
-              dip_level: '{{ [20, (burst_baseline | float) * (range(25, 61) | random) / 100] | max }}'
-              recovery_level: '{{ [100, (burst_baseline | float) + (range(10, 31) | random)] | min }}'
+              dip_level: '{% set fraction = (range(20, 41) | random) if (pulse_count | int) == 1 else (range(25, 61)
+                | random) %}
+
+                {{ [20, (burst_baseline | float) * fraction / 100] | max }}'
+              recovery_level: "{% if (pulse_count | int) == 1 %}\n  {% set lift = range(-3, 5) | random %}\n{% elif (range(0,\
+                \ 5) | random) == 0 %}\n  {% set lift = range(10, 31) | random %}\n{% else %}\n  {% set lift = range(-4,\
+                \ 11) | random %}\n{% endif %}\n{{ [20, [100, (burst_baseline | float) + lift] | min] | max }}"
           - repeat:
               for_each: '{% set a = burst_level | float %}{% set d = dip_level | float %}{% set r = recovery_level |
                 float %}
@@ -188,7 +205,8 @@ sequence:
               - if:
                 - condition: template
                   value_template: '{{ is_state(trial_script_entity, ''on'') and as_timestamp(now()) - (started | float)
-                    < 180 and expand(bulbs) | selectattr(''state'', ''eq'', ''on'') | list | count > 0 }}'
+                    < (run_minutes | float)*60 and expand(bulbs) | selectattr(''state'', ''eq'', ''on'') | list | count
+                    > 0 }}'
                 then:
                 - action: light.turn_on
                   continue_on_error: true
@@ -198,15 +216,15 @@ sequence:
                   data:
                     brightness_pct: '{{ repeat.item | round | int }}'
                 - delay:
-                    milliseconds: '{{ [150, 175, 200] | random }}'
+                    milliseconds: '{{ ([130, 150, 175] if (pulse_count | int) == 1 else [150, 175, 200]) | random }}'
           - variables:
               burst_level: '{{ recovery_level }}'
           - delay:
               milliseconds: '{{ [200, 300, 450, 650] | random }}'
       - variables:
           wind_next: '{{ as_timestamp(now()) - (started | float) + (range(40, 101) | random) }}'
-          gust_events: '{{ [[as_timestamp(now()) - (started | float), range(30, 51) | random, (range(20, 31) | random)/10,
-            range(0,10000) | random]] }}'
+          gust_events: '{% if (pulse_count | int) == 1 %}{{ [] }}{% else %}{{ [[as_timestamp(now()) - (started | float),
+            range(30, 51) | random, (range(20, 31) | random)/10, range(0,10000) | random]] }}{% endif %}'
           last_levels: '{% set ns=namespace(items=[]) %}{% for id in bulbs %}{% set ns.items=ns.items+[(id, burst_level
             | float)] %}{% endfor %}{{ dict(ns.items) }}'
           last_times: '{% set ns=namespace(items=[]) %}{% for id in bulbs %}{% set ns.items=ns.items+[(id, as_timestamp(now())

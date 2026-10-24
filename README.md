@@ -42,11 +42,13 @@ python3 -m unittest discover -s tests -v
 
 Tests render the shipped Jinja selection and model templates to check off/unavailable exclusions, event continuity and pruning, brightness bounds, different bulb responses, baseline transition continuity, and weighted dwell distribution. They do not emulate Home Assistant's scheduler or Tuya's physical response. Installation and live integration tests are recorded separately from these deterministic checks.
 
-## Optional three-minute wind experiment
+## Optional timed wind experiment
 
-`experiments/candlelight_wind_trial.yaml` adds loose three-pulse wind episodes, 40–100-second intervals after each episode before the next one, and a first-order smoothing response that suggests filament inertia. Each pulse uses six intermediate dimming and recovery frames, with varied depths and spacing. Dips target 25–60% of the current baseline (bounded at 20% absolute brightness), and rebounds target 10–30 percentage points above it (bounded at 100%). A brief gentle damped tail follows the episode. Frequent background gusts are disabled in this experiment; broader gentle turbulence, slow wandering, and baseline blends continue between episodes. It keeps the same weighted baseline holds and warm-white color. Its experimental floor is 20%; the everyday model's floor remains 25%. The first episode starts after an 8–14-second calm opening. Actual burst speed is limited by the integration and bulbs.
+`experiments/candlelight_wind_trial.yaml` models occasional light gusts as a random mix of single deep dips and loose three-pulse flutters. It waits 40–100 seconds after each episode before the next, with an 8–14-second opening delay. Single dips fall toward 20–40% of the current baseline (bounded at 20% absolute brightness), then return near the baseline without an added oscillating tail. Triplets use varied dips and rebounds, followed by a brief gentle damped tail. Each pulse uses six brightness frames to soften the fall and recovery. Near-full rebounds are occasional rather than routine.
 
-Install it as a separate script with entity ID `script.candlelight_wind_trial`. Run normal Natural Candlelight first, then run the trial and choose the bulbs to test. Only currently-on bulbs participate. The trial temporarily pauses the nightly automation, moves the normal controller to the other bulbs, and runs the selected group for three minutes. It then restarts the normal model on all currently-on eligible lights and restores the nightly automation's previous enabled state. The model is experimental and is not selected by the nightly automation.
+This experiment chooses 80%, 70%, and 50% baseline targets with 30%, 40%, and 30% probabilities respectively, while retaining 30–180-second holds and 15–30-second eased blends. The everyday model retains its original 50%/25%/25% target weights. Broad gentle turbulence and slow wandering continue between gusts; there are no independent frequent background gusts. A 1.3-second first-order filter smooths this surrounding motion. Warm-white color remains fixed. The experimental brightness floor is 20%; the everyday model's floor is 25%. Actual burst speed and smoothness depend on the integration and bulbs.
+
+Install it as a separate script with entity ID `script.candlelight_wind_trial`. Run normal Natural Candlelight first, then run the trial and choose the bulbs to test. Set Duration to 1–60 minutes; it defaults to three minutes. Only currently-on bulbs participate. The trial temporarily pauses the nightly automation, moves the normal controller to the other bulbs, and runs the selected group for the chosen duration. It then restarts the normal model on all currently-on eligible lights and restores the nightly automation's previous enabled state. The model is experimental and is not selected by the nightly automation.
 
 Allow the timed trial to finish. If you interrupt it through `script.turn_off` or restart/reload Home Assistant, its final cleanup actions cannot run. Recovery: stop both scripts, turn the Active helper off, restart Natural Candlelight with `only_on: true`, and re-enable the nightly automation if you normally use it. The trial intentionally resumes the normal model on all lit bulbs rather than restoring a previous manually selected subgroup.
 
@@ -67,7 +69,7 @@ data:
     minutes: 0
 ```
 
-Run the optional experiment on the same group:
+Run the optional experiment on the same group for 20 minutes:
 
 ```yaml
 action: script.turn_on
@@ -75,6 +77,7 @@ target:
   entity_id: script.candlelight_wind_trial
 data:
   variables:
+    minutes: 20
     lights:
       - light.example_lamp_1
       - light.example_lamp_2
