@@ -1,0 +1,8 @@
+alias: Stop Natural Candlelight
+description: Stop the effect and leave bulbs that are still on steady at 80%.
+icon: mdi:candle-off
+mode: single
+sequence:
+- action: input_boolean.turn_off
+  target:
+    entity_id: input_boolean.natural_candlelight_active
