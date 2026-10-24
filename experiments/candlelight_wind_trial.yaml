@@ -1,7 +1,7 @@
 alias: Candlelight Wind Trial
-description: 'Timed candle-gust experiment (3 minutes by default): a mix of single deep dips and loose triplets, softened
-  recoveries, less time at the brightest baseline, and random 40–100-second calm gaps. Fixed warm white; restores normal
-  candlelight afterward.'
+description: 'Timed candle-gust experiment: mixed single dips and triplets, with a mandatory quick 90–100% rebound after
+  each low-baseline hold. Softer settling, fewer sustained bright periods, fixed warm white; restores normal candlelight
+  afterward.'
 icon: mdi:candle
 mode: single
 fields:
@@ -142,6 +142,8 @@ sequence:
     last_levels: {}
     last_times: {}
     wind_next: '{{ range(8, 15) | random }}'
+    leaving_low: false
+    rebound_peak: 95
 - repeat:
     while:
     - condition: template
@@ -165,11 +167,56 @@ sequence:
         value_template: '{{ (elapsed | float) >= (baseline_next | float) }}'
       then:
       - variables:
+          leaving_low: '{{ (baseline_target | float) <= 50 }}'
           baseline_from: '{{ baseline_target }}'
-          baseline_target: '{{ [80, 80, 80, 70, 70, 70, 70, 50, 50, 50] | random }}'
+          baseline_target: '{{ ([70, 70, 80] if leaving_low else [50, 50, 50, 70, 70, 80, 80]) | random }}'
           baseline_changed: '{{ elapsed }}'
-          baseline_blend_seconds: '{{ range(15, 31) | random }}'
+          baseline_blend_seconds: '{{ (range(4, 8) if leaving_low else range(15, 31)) | random }}'
           baseline_next: '{{ (elapsed | float) + (baseline_blend_seconds | float) + (range(30, 181) | random) }}'
+          rebound_peak: '{{ range(90, 101) | random }}'
+      - if:
+        - condition: template
+          value_template: '{{ leaving_low }}'
+        then:
+        - repeat:
+            for_each: '{% set ns=namespace(total=0.0, count=0) %}
+
+              {% for id in bulbs %}{% if id in last_levels %}{% set ns.total=ns.total+(last_levels[id] | float) %}{%
+              set ns.count=ns.count+1 %}{% endif %}{% endfor %}
+
+              {% set current = ns.total/ns.count if ns.count > 0 else 50 %}
+
+              {{ [(current + (rebound_peak | float))/2, rebound_peak | float] }}'
+            sequence:
+            - if:
+              - condition: template
+                value_template: '{{ is_state(trial_script_entity, ''on'') and as_timestamp(now()) - (started | float)
+                  < (run_minutes | float)*60 and expand(bulbs) | selectattr(''state'', ''eq'', ''on'') | list | count
+                  > 0 }}'
+              then:
+              - action: light.turn_on
+                continue_on_error: true
+                target:
+                  entity_id: '{{ expand(bulbs) | selectattr(''state'', ''eq'', ''on'') | map(attribute=''entity_id'')
+                    | list }}'
+                data:
+                  brightness_pct: '{{ repeat.item | round | int }}'
+              - delay:
+                  milliseconds: '{{ [120, 150, 180] | random }}'
+        - delay:
+            milliseconds: '{{ [400, 500, 650] | random }}'
+        - variables:
+            baseline_from: '{{ rebound_peak }}'
+            baseline_changed: '{{ as_timestamp(now()) - (started | float) }}'
+            baseline_next: '{{ (baseline_next | float) + as_timestamp(now()) - (started | float) - (elapsed | float)
+              }}'
+            wind_next: '{{ [wind_next | float, as_timestamp(now()) - (started | float) + (range(15, 26) | random)] |
+              max }}'
+            gust_events: []
+            last_levels: '{% set ns=namespace(items=[]) %}{% for id in bulbs %}{% set ns.items=ns.items+[(id, rebound_peak
+              | float)] %}{% endfor %}{{ dict(ns.items) }}'
+            last_times: '{% set ns=namespace(items=[]) %}{% for id in bulbs %}{% set ns.items=ns.items+[(id, as_timestamp(now())
+              - (started | float))] %}{% endfor %}{{ dict(ns.items) }}'
     - if:
       - condition: template
         value_template: '{{ (elapsed | float) >= (wind_next | float) }}'

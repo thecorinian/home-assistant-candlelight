@@ -14,6 +14,8 @@ INNER=next(a['repeat']['sequence'][0]['then'] for a in LOOP['sequence'] if 'repe
 RAW=next(a['variables']['raw_level'] for a in INNER if 'raw_level' in a.get('variables',{}))
 SMOOTH=next(a['variables']['level'] for a in INNER if 'level' in a.get('variables',{}))
 CACHE=next(a['variables']['last_levels'] for a in INNER if 'last_levels' in a.get('variables',{}))
+BASELINE_CHANGE=next(a['then'] for a in LOOP['sequence'] if 'baseline_target' in a.get('then',[{}])[0].get('variables',{}))
+REBOUND=BASELINE_CHANGE[1]['then']
 
 class Wind(unittest.TestCase):
  setUp=test_templates.Templates.setUp
@@ -76,14 +78,45 @@ class Wind(unittest.TestCase):
   counts={50:0,70:0,80:0}
   singles=0
   bright_rebounds=0
+  previous=70
   for _ in range(3000):
-   counts[self.render(baseline_change['baseline_target'])]+=1
+   target=self.render(baseline_change['baseline_target'],leaving_low=previous==50)
+   if previous==50: self.assertIn(target,[70,80])
+   counts[target]+=1
+   previous=target
    singles+=self.render(BURST[0]['variables']['pulse_count'])==1
    bright_rebounds+=self.render(PULSE[0]['variables']['recovery_level'],burst_baseline=80,pulse_count=3)>=95
   for target,expected in [(80,.3),(70,.4),(50,.3)]:
    self.assertAlmostEqual(counts[target]/3000,expected,delta=.04)
   self.assertAlmostEqual(singles/3000,.5,delta=.04)
   self.assertTrue(.08<bright_rebounds/3000<.22)
+ def test_low_hold_always_rebounds_then_settles_smoothly(self):
+  change=BASELINE_CHANGE[0]['variables']
+  for old in [50,70,80]:
+   leaving=self.render(change['leaving_low'],baseline_target=old)
+   self.assertEqual(leaving,old==50)
+  for _ in range(100):
+   peak=self.render(change['rebound_peak'])
+   self.assertTrue(90<=peak<=100)
+   frames=self.render(REBOUND[0]['repeat']['for_each'],bulbs=['light.a','light.b'],last_levels={'light.a':42,'light.b':50},rebound_peak=peak)
+   self.assertEqual(frames,[(46+peak)/2,peak])
+   fade=self.render(change['baseline_blend_seconds'],leaving_low=True)
+   self.assertTrue(4<=fade<=7)
+  baseline=next(a['variables']['baseline'] for a in INNER if 'baseline' in a.get('variables',{}))
+  values=[]
+  for t in [0,1,2,3,4,5]:
+   self.env.globals['now']=lambda:t
+   values.append(self.render(baseline,started=0,baseline_changed=0,baseline_from=95,baseline_target=70,baseline_blend_seconds=5))
+  self.assertEqual(values[0],95)
+  self.assertEqual(values[-1],70)
+  self.assertEqual(values,sorted(values,reverse=True))
+ def test_rebound_preserves_off_lights_and_duration_guard(self):
+  frame=REBOUND[0]['repeat']['sequence'][0]
+  target=frame['then'][0]['target']['entity_id']
+  self.assertEqual(self.render(target,bulbs=['light.a','light.b','light.dead']),['light.a'])
+  self.env.globals['is_state']=lambda entity,state:True
+  self.env.globals['now']=lambda:1200
+  self.assertFalse(self.render(frame['if'][0]['value_template'],trial_script_entity='script.test',started=0,run_minutes=20,bulbs=['light.a']))
  def test_calm_and_damped_tail_stay_bounded(self):
   ctx=dict(started=0,seed=.7,repeat=NS(item='light.a'),gust_events=[],baseline=70)
   for baseline in [50,70,80]:
