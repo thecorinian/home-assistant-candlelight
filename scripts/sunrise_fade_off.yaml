@@ -30,6 +30,8 @@ variables:
   controllers:
   - script.natural_candlelight
   - script.candlelight_wind_trial
+  - script.synchronized_color_cycle
+  - script.custom_lighting_patterns
 sequence:
 - variables:
     running_controllers: '{{ controllers | select(''is_state'', ''on'') | list }}'
@@ -43,6 +45,13 @@ sequence:
 - action: input_boolean.turn_off
   target:
     entity_id: input_boolean.natural_candlelight_active
+- if:
+  - condition: template
+    value_template: '{{ is_state(''input_boolean.synchronized_color_cycle_active'',''on'') }}'
+  then:
+  - action: input_boolean.turn_off
+    target:
+      entity_id: input_boolean.synchronized_color_cycle_active
 - if:
   - condition: template
     value_template: '{{ resume_helpers | count > 0 }}'

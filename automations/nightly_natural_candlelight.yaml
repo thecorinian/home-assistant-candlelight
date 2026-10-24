@@ -47,6 +47,10 @@ actions:
     value_template: '{{ not is_state(''script.candlelight_wind_trial'', ''on'') }}'
   - condition: template
     value_template: '{{ not is_state(''script.sunrise_fade_off'', ''on'') }}'
+  - condition: template
+    value_template: '{{ not is_state(''script.synchronized_color_cycle'',''on'') }}'
+  - condition: template
+    value_template: '{{ not is_state(''script.custom_lighting_patterns'',''on'') }}'
   - if:
     - condition: template
       value_template: '{{ reason in [''evening'', ''startup''] }}'

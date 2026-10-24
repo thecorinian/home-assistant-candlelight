@@ -1,0 +1,8 @@
+alias: Stop Custom Lighting Patterns
+description: Stop the selected ambient pattern gracefully and return lit bulbs to warm white or candlelight.
+icon: mdi:stop-circle-outline
+mode: single
+sequence:
+- action: input_boolean.turn_off
+  target:
+    entity_id: input_boolean.synchronized_color_cycle_active

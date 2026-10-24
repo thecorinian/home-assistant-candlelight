@@ -1,0 +1,349 @@
+alias: Custom Lighting Patterns
+description: Nine custom patterns for selected bulbs. Paired dome bulbs share brightness and motion; Aurora offers
+  a gentle tint difference. Use Stop Custom Lighting Patterns to return to candlelight.
+icon: mdi:palette
+mode: single
+fields:
+  pattern:
+    name: Pattern
+    default: molten_glass
+    selector:
+      select:
+        options:
+        - value: molten_glass
+          label: Molten Glass
+        - value: aurora
+          label: Aurora
+        - value: cloudlight
+          label: Clouds over Sunlight
+        - value: ember_bed
+          label: Ember Bed
+        - value: incandescent_shimmer
+          label: Incandescent Shimmer
+        - value: open_floor_wave
+          label: Open Floor Wave
+        - value: stair_cascade
+          label: Stairway Cascade
+        - value: backyard_echo
+          label: Backyard Echo
+        - value: ice_breath
+          label: Ice Breath
+  lights:
+    name: Bulbs
+    description: Select bulbs to include. Select both bulbs in each dome. Empty selection does nothing.
+    required: true
+    selector:
+      entity:
+        filter:
+          domain: light
+        multiple: true
+  minutes:
+    name: Duration
+    description: Zero runs until stopped; a positive number returns to warm white afterward.
+    default: 0
+    selector:
+      number:
+        min: 0
+        max: 240
+        step: 1
+        unit_of_measurement: minutes
+        mode: box
+  only_on:
+    name: Only lights already on
+    description: Enable to leave selected off bulbs off.
+    default: false
+    selector:
+      boolean: {}
+  fixture_order:
+    name: Fixture order (optional)
+    description: Select one bulb from each fixture in the order the wave should travel. Paired bulbs stay together.
+      Omit to use the Bulbs selection order.
+    default: []
+    selector:
+      entity:
+        filter:
+          domain: light
+        multiple: true
+  pair_tint:
+    name: Aurora dome tint spread
+    description: Hue difference between paired bulbs. Zero keeps matching colors. Only used by Aurora.
+    default: 8
+    selector:
+      number:
+        min: 0
+        max: 20
+        step: 1
+        mode: slider
+        unit_of_measurement: degrees
+variables:
+  excluded_lights: []
+  pause_helpers: []
+  pause_automations: []
+  competing_color_scripts: []
+  trial_script: script.candlelight_wind_trial
+  linked_pairs: []
+  echo_tail_lights: []
+sequence:
+- condition: template
+  value_template: '{{ not is_state(''script.sunrise_fade_off'',''on'') and not is_state(trial_script,''on'') and
+    not is_state(''script.synchronized_color_cycle'',''on'') }}'
+- variables:
+    requested: '{{ [lights] if lights is defined and lights is string else lights|default([],true) }}'
+    only_lit: '{{ only_on | default(false) | bool }}'
+    run_minutes: '{{ [0, [240, minutes | default(0) | float(0)] | min] | max }}'
+    selected_pattern: '{{ pattern|default(''molten_glass'') }}'
+    ordered_ids: '{{ [fixture_order] if fixture_order is defined and fixture_order is string else fixture_order|default([],true)
+      }}'
+    tint_spread: '{{ [0,[20,pair_tint|default(8)|float(8)]|min]|max }}'
+- condition: template
+  value_template: '{{ selected_pattern in [''molten_glass'', ''aurora'', ''cloudlight'', ''ember_bed'', ''incandescent_shimmer'',
+    ''open_floor_wave'', ''stair_cascade'', ''backyard_echo'', ''ice_breath''] }}'
+- variables:
+    bulbs: '{% set ns=namespace(ids=[]) %}
+
+      {% for id in requested %}{% for s in expand(id) %}
+
+      {% set modes=s.attributes.get(''supported_color_modes'',[]) or [] %}
+
+      {% set usable=(modes|reject(''in'',[''onoff'',''unknown''])|list|count > 0) if selected_pattern in [''cloudlight'',''incandescent_shimmer'',''stair_cascade'']
+      else (modes|select(''in'',[''hs'',''rgb'',''rgbw'',''rgbww'',''xy''])|list|count > 0) %}
+
+      {% if s.domain == ''light'' and s.state in [''on'',''off''] and s.entity_id not in excluded_lights and (not
+      only_lit or s.state == ''on'') and usable %}
+
+      {% set ns.ids=ns.ids+[s.entity_id] %}{% endif %}{% endfor %}{% endfor %}{{ ns.ids|unique|list }}'
+- condition: template
+  value_template: '{{ bulbs | count > 0 }}'
+- variables:
+    candle_was_on: '{{ is_state(''script.natural_candlelight'',''on'') }}'
+    helpers_to_resume: '{{ pause_helpers | select(''is_state'',''on'') | list }}'
+    automations_to_resume: '{{ pause_automations | select(''is_state'',''on'') | list }}'
+    paused_color_scripts: '{% set ns=namespace(items=[]) %} {% for item in competing_color_scripts %} {% if is_state(item.entity_id,''on'')
+      and item.lights | select(''in'',bulbs) | list | count > 0 %} {% set ns.items=ns.items+[item] %} {% endif %}{%
+      endfor %}{{ ns.items }}'
+- action: input_boolean.turn_on
+  target:
+    entity_id: input_boolean.synchronized_color_cycle_active
+- if:
+  - condition: template
+    value_template: '{{ paused_color_scripts | count > 0 }}'
+  then:
+  - action: script.turn_off
+    target:
+      entity_id: '{{ paused_color_scripts | map(attribute=''entity_id'') | list }}'
+- if:
+  - condition: template
+    value_template: '{{ helpers_to_resume | count > 0 }}'
+  then:
+  - action: input_boolean.turn_off
+    target:
+      entity_id: '{{ helpers_to_resume }}'
+- if:
+  - condition: template
+    value_template: '{{ automations_to_resume | count > 0 }}'
+  then:
+  - action: automation.turn_off
+    target:
+      entity_id: '{{ automations_to_resume }}'
+    data:
+      stop_actions: true
+  - action: automation.turn_on
+    target:
+      entity_id: '{{ automations_to_resume }}'
+- if:
+  - condition: template
+    value_template: '{{ candle_was_on }}'
+  then:
+  - action: script.turn_off
+    target:
+      entity_id: script.natural_candlelight
+  - action: input_boolean.turn_off
+    target:
+      entity_id: input_boolean.natural_candlelight_active
+  - variables:
+      other_lights: '{{ states.light | selectattr(''state'',''eq'',''on'') | map(attribute=''entity_id'') | reject(''in'',bulbs)
+        | list }}'
+  - if:
+    - condition: template
+      value_template: '{{ other_lights | count > 0 }}'
+    then:
+    - action: script.turn_on
+      target:
+        entity_id: script.natural_candlelight
+      data:
+        variables:
+          lights: '{{ other_lights }}'
+          only_on: true
+          minutes: 0
+- variables:
+    cohorts: '{% if selected_pattern == ''ice_breath'' %}{{ [{''lights'':bulbs,''position'':0,''tint'':0}] }}{%
+      else %}{% set ns=namespace(done=[],groups=[],items=[]) %}
+
+      {% set ordered=(ordered_ids|select(''in'',bulbs)|list)+(bulbs|reject(''in'',ordered_ids)|list) %}
+
+      {% if selected_pattern == ''backyard_echo'' %}{% set ordered=(ordered|reject(''in'',echo_tail_lights)|list)+(ordered|select(''in'',echo_tail_lights)|list)
+      %}{% endif %}
+
+      {% for id in ordered %}{% if id not in ns.done %}
+
+      {% set g=namespace(ids=[id]) %}{% for pair in linked_pairs %}{% if id in pair %}{% set g.ids=pair|select(''in'',bulbs)|list
+      %}{% endif %}{% endfor %}
+
+      {% set ns.groups=ns.groups+[g.ids] %}{% set ns.done=ns.done+g.ids %}
+
+      {% endif %}{% endfor %}
+
+      {% for group in ns.groups %}{% set position=loop.index0 %}
+
+      {% for id in group %}{% set tint=((loop.index0/(group|count-1)-0.5)*tint_spread) if group|count>1 and selected_pattern
+      == ''aurora'' else 0 %}
+
+      {% set ns.items=ns.items+[{''lights'':[id],''position'':position,''tint'':tint}] %}
+
+      {% endfor %}{% endfor %}{{ ns.items }}{% endif %}'
+    seed: '{{ (range(0,6283)|random)/1000 }}'
+    dip_period: '{{ range(43,89)|random }}'
+    initial_hue: '{{ ((state_attr(bulbs[0],''hs_color'') or [210,85])[0]|float(210))%360 }}'
+    elapsed: 0
+    started: '{{ as_timestamp(now()) }}'
+    cycle_phase: 0
+- repeat:
+    for_each: '{{ cohorts }}'
+    sequence:
+    - if:
+      - condition: template
+        value_template: '{{ is_state(''input_boolean.synchronized_color_cycle_active'',''on'') and (expand(repeat.item.lights)|selectattr(''state'',''in'',[''on'']
+          if only_lit else [''on'',''off''])|list|count>0) }}'
+      then:
+      - action: light.turn_on
+        continue_on_error: true
+        target:
+          entity_id: '{{ expand(repeat.item.lights)|selectattr(''state'',''in'',[''on''] if only_lit else [''on'',''off''])|map(attribute=''entity_id'')|list
+            }}'
+        data: "{% set t=(elapsed|float)*(2.5 if selected_pattern == 'molten_glass' else 1.6 if selected_pattern\
+          \ == 'aurora' else 1) %}{% set p=repeat.item.position|float %}{% set s=seed|float %}\n{% set n=0.5+0.23*sin(0.037*t+s)+0.16*sin(0.071*t+2*s)+0.11*sin(0.113*t+0.7*s)\
+          \ %}\n{% set warm=selected_pattern in ['cloudlight','incandescent_shimmer','stair_cascade'] %}\n{% set\
+          \ h=25 %}{% set sat=80 %}{% set k=2700 %}{% set b=50 %}\n{% if selected_pattern == 'ice_breath' %}\n \
+          \ {% set u=0.5-0.5*sin(0.017453292519943295*(cycle_phase|float)+1.5707963267948966) %}{% set breath=u*u*(3-2*u)\
+          \ %}\n  {% set h=240 %}{% set sat=100*breath %}{% set b=100-99*breath %}\n{% elif selected_pattern ==\
+          \ 'molten_glass' %}\n  {% set h=12+32*n+8*sin(0.043*t+s) %}{% set sat=75+8*sin(0.027*t+s) %}{% set b=30+48*n\
+          \ %}\n{% elif selected_pattern == 'aurora' %}\n  {% set h=140+100*n+15*sin(0.041*t-0.4*p)+repeat.item.tint|float\
+          \ %}{% set sat=72+16*n %}{% set b=32+40*n %}\n{% elif selected_pattern == 'cloudlight' %}\n  {% set cloud=(0.5+0.5*sin(0.067*t+s))**3\
+          \ %}{% set b=76-43*cloud+2*sin(0.029*t+2*s) %}{% set k=3300 %}\n{% elif selected_pattern == 'ember_bed'\
+          \ %}\n  {% set bloom=([0,sin(0.089*t+s)]|max)**12 %}{% set h=9+12*n %}{% set sat=86 %}{% set b=20+25*n+25*bloom\
+          \ %}\n{% elif selected_pattern == 'incandescent_shimmer' %}\n  {% set q=((t+s*5) % (dip_period|float))-(dip_period|float)/2\
+          \ %}\n  {% set dip=2.718281828**(-((q/0.7)**2)) %}\n  {% set b=65+2*sin(1.8*t+s)+1.4*sin(3.17*t+2*s)-28*dip\
+          \ %}{% set k=2600 %}\n{% elif selected_pattern == 'open_floor_wave' %}\n  {% set wave=sin(0.04*t-0.9*p+s)\
+          \ %}{% set h=190+40*wave+25*sin(0.017*t+s) %}{% set sat=75 %}{% set b=45+20*wave %}\n{% elif selected_pattern\
+          \ == 'stair_cascade' %}\n  {% set b=30+45*(0.5+0.5*sin(0.24*t-0.9*p+s))**2 %}{% set k=2700 %}\n{% elif\
+          \ selected_pattern == 'backyard_echo' %}\n  {% set h=(initial_hue|float)+2*t-30*p %}{% set sat=85 %}{%\
+          \ set b=55+10*sin(0.05*t-0.7*p+s) %}\n{% endif %}\n{% set level=([1,[100,b]|min]|max|round(0)|int) if\
+          \ selected_pattern == 'ice_breath' else ([10,[85,b]|min]|max|round(0)|int) %}\n{% set modes=state_attr(repeat.item.lights[0],'supported_color_modes')\
+          \ or [] %}\n{% if warm and 'color_temp' in modes %}\n  {% set lo=state_attr(repeat.item.lights[0],'min_color_temp_kelvin')|int(2000)\
+          \ %}\n  {% set hi=state_attr(repeat.item.lights[0],'max_color_temp_kelvin')|int(6500) %}\n  {{ {'brightness_pct':level,'color_temp_kelvin':[lo,[k,hi]|min]|max}\
+          \ }}\n{% elif warm and modes|select('in',['hs','rgb','rgbw','rgbww','xy'])|list|count > 0 %}\n  {{ {'brightness_pct':level,'hs_color':[30,28\
+          \ if selected_pattern == 'cloudlight' else 45]} }}\n{% elif warm %}{{ {'brightness_pct':level} }}\n{%\
+          \ else %}{{ {'brightness_pct':level,'hs_color':[h%360,sat]} }}{% endif %}"
+- repeat:
+    while:
+    - condition: template
+      value_template: '{{ is_state(''input_boolean.synchronized_color_cycle_active'',''on'') and ((run_minutes|float)==0
+        or as_timestamp(now())-(started|float)<(run_minutes|float)*60) and bulbs|select(''is_state'',''on'')|list|count>0
+        }}'
+    sequence:
+    - variables:
+        elapsed: '{{ as_timestamp(now())-(started|float) }}'
+    - repeat:
+        for_each: '{{ cohorts }}'
+        sequence:
+        - if:
+          - condition: template
+            value_template: '{{ is_state(''input_boolean.synchronized_color_cycle_active'',''on'') and repeat.item.lights|select(''is_state'',''on'')|list|count>0
+              and ((run_minutes|float)==0 or as_timestamp(now())-(started|float)<(run_minutes|float)*60) }}'
+          then:
+          - action: light.turn_on
+            continue_on_error: true
+            target:
+              entity_id: '{{ repeat.item.lights|select(''is_state'',''on'')|list }}'
+            data: "{% set t=(elapsed|float)*(2.5 if selected_pattern == 'molten_glass' else 1.6 if selected_pattern\
+              \ == 'aurora' else 1) %}{% set p=repeat.item.position|float %}{% set s=seed|float %}\n{% set n=0.5+0.23*sin(0.037*t+s)+0.16*sin(0.071*t+2*s)+0.11*sin(0.113*t+0.7*s)\
+              \ %}\n{% set warm=selected_pattern in ['cloudlight','incandescent_shimmer','stair_cascade'] %}\n{%\
+              \ set h=25 %}{% set sat=80 %}{% set k=2700 %}{% set b=50 %}\n{% if selected_pattern == 'ice_breath'\
+              \ %}\n  {% set u=0.5-0.5*sin(0.017453292519943295*(cycle_phase|float)+1.5707963267948966) %}{% set\
+              \ breath=u*u*(3-2*u) %}\n  {% set h=240 %}{% set sat=100*breath %}{% set b=100-99*breath %}\n{% elif\
+              \ selected_pattern == 'molten_glass' %}\n  {% set h=12+32*n+8*sin(0.043*t+s) %}{% set sat=75+8*sin(0.027*t+s)\
+              \ %}{% set b=30+48*n %}\n{% elif selected_pattern == 'aurora' %}\n  {% set h=140+100*n+15*sin(0.041*t-0.4*p)+repeat.item.tint|float\
+              \ %}{% set sat=72+16*n %}{% set b=32+40*n %}\n{% elif selected_pattern == 'cloudlight' %}\n  {% set\
+              \ cloud=(0.5+0.5*sin(0.067*t+s))**3 %}{% set b=76-43*cloud+2*sin(0.029*t+2*s) %}{% set k=3300 %}\n\
+              {% elif selected_pattern == 'ember_bed' %}\n  {% set bloom=([0,sin(0.089*t+s)]|max)**12 %}{% set h=9+12*n\
+              \ %}{% set sat=86 %}{% set b=20+25*n+25*bloom %}\n{% elif selected_pattern == 'incandescent_shimmer'\
+              \ %}\n  {% set q=((t+s*5) % (dip_period|float))-(dip_period|float)/2 %}\n  {% set dip=2.718281828**(-((q/0.7)**2))\
+              \ %}\n  {% set b=65+2*sin(1.8*t+s)+1.4*sin(3.17*t+2*s)-28*dip %}{% set k=2600 %}\n{% elif selected_pattern\
+              \ == 'open_floor_wave' %}\n  {% set wave=sin(0.04*t-0.9*p+s) %}{% set h=190+40*wave+25*sin(0.017*t+s)\
+              \ %}{% set sat=75 %}{% set b=45+20*wave %}\n{% elif selected_pattern == 'stair_cascade' %}\n  {% set\
+              \ b=30+45*(0.5+0.5*sin(0.24*t-0.9*p+s))**2 %}{% set k=2700 %}\n{% elif selected_pattern == 'backyard_echo'\
+              \ %}\n  {% set h=(initial_hue|float)+2*t-30*p %}{% set sat=85 %}{% set b=55+10*sin(0.05*t-0.7*p+s)\
+              \ %}\n{% endif %}\n{% set level=([1,[100,b]|min]|max|round(0)|int) if selected_pattern == 'ice_breath'\
+              \ else ([10,[85,b]|min]|max|round(0)|int) %}\n{% set modes=state_attr(repeat.item.lights[0],'supported_color_modes')\
+              \ or [] %}\n{% if warm and 'color_temp' in modes %}\n  {% set lo=state_attr(repeat.item.lights[0],'min_color_temp_kelvin')|int(2000)\
+              \ %}\n  {% set hi=state_attr(repeat.item.lights[0],'max_color_temp_kelvin')|int(6500) %}\n  {{ {'brightness_pct':level,'color_temp_kelvin':[lo,[k,hi]|min]|max}\
+              \ }}\n{% elif warm and modes|select('in',['hs','rgb','rgbw','rgbww','xy'])|list|count > 0 %}\n  {{\
+              \ {'brightness_pct':level,'hs_color':[30,28 if selected_pattern == 'cloudlight' else 45]} }}\n{% elif\
+              \ warm %}{{ {'brightness_pct':level} }}\n{% else %}{{ {'brightness_pct':level,'hs_color':[h%360,sat]}\
+              \ }}{% endif %}"
+    - variables:
+        cycle_phase: '{{ ((cycle_phase|int)+1)%360 }}'
+    - delay:
+        milliseconds: '{{ 150 if selected_pattern == ''ice_breath'' else 250 }}'
+- repeat:
+    for_each: '{{ bulbs }}'
+    sequence:
+    - if:
+      - condition: template
+        value_template: '{{ is_state(repeat.item,''on'') }}'
+      then:
+      - action: light.turn_on
+        continue_on_error: true
+        target:
+          entity_id: '{{ repeat.item }}'
+        data: '{% set modes=state_attr(repeat.item,''supported_color_modes'') or [] %} {% if ''color_temp'' in modes
+          %} {% set lo=state_attr(repeat.item,''min_color_temp_kelvin'') | int(2000) %} {% set hi=state_attr(repeat.item,''max_color_temp_kelvin'')
+          | int(6500) %} {{ {''brightness_pct'':50, ''color_temp_kelvin'':[lo,[2000,hi]|min]|max} }} {% else %}{{
+          {''brightness_pct'':50, ''hs_color'':[30,35]} }}{% endif %}'
+- if:
+  - condition: template
+    value_template: '{{ candle_was_on }}'
+  then:
+  - action: script.turn_off
+    target:
+      entity_id: script.natural_candlelight
+  - action: script.turn_on
+    target:
+      entity_id: script.natural_candlelight
+    data:
+      variables:
+        lights: []
+        only_on: true
+        minutes: 0
+  else:
+  - if:
+    - condition: template
+      value_template: '{{ helpers_to_resume | count > 0 }}'
+    then:
+    - action: input_boolean.turn_on
+      target:
+        entity_id: '{{ helpers_to_resume }}'
+- repeat:
+    for_each: '{{ paused_color_scripts }}'
+    sequence:
+    - if:
+      - condition: template
+        value_template: '{{ repeat.item.lights | select(''is_state'',''on'') | list | count > 0 }}'
+      then:
+      - action: script.turn_on
+        continue_on_error: true
+        target:
+          entity_id: '{{ repeat.item.entity_id }}'
+- action: input_boolean.turn_off
+  target:
+    entity_id: input_boolean.synchronized_color_cycle_active

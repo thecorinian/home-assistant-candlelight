@@ -1,0 +1,215 @@
+alias: Synchronized Color Cycle
+description: Approved smooth synchronized color cycle. One-degree steps, 150 ms pacing, 65% brightness and 85% saturation.
+  Select bulbs; zero minutes runs until Stop Synchronized Color Cycle or sunrise.
+icon: mdi:palette
+mode: single
+fields:
+  lights:
+    name: Bulbs
+    description: Choose the bulbs to color-cycle together. Select both bulbs in a shared dome fixture. White-only
+      and unavailable lights are skipped.
+    required: true
+    selector:
+      entity:
+        filter:
+          domain: light
+        multiple: true
+  minutes:
+    name: Duration
+    description: Zero runs until stopped; a positive number returns to warm white afterward.
+    default: 0
+    selector:
+      number:
+        min: 0
+        max: 240
+        step: 1
+        unit_of_measurement: minutes
+        mode: box
+  only_on:
+    name: Only lights already on
+    description: Enable to leave selected off bulbs off.
+    default: false
+    selector:
+      boolean: {}
+variables:
+  excluded_lights: []
+  pause_helpers: []
+  pause_automations: []
+  competing_color_scripts: []
+  trial_script: script.candlelight_wind_trial
+sequence:
+- condition: template
+  value_template: '{{ not is_state(''script.sunrise_fade_off'',''on'') and not is_state(trial_script,''on'') and
+    not is_state(''script.custom_lighting_patterns'',''on'') }}'
+- variables:
+    requested: '{{ lights | default([], true) }}'
+    only_lit: '{{ only_on | default(false) | bool }}'
+    run_minutes: '{{ [0, [240, minutes | default(0) | float(0)] | min] | max }}'
+- variables:
+    bulbs: "{% set ns=namespace(ids=[]) %} {% for s in expand(requested) %} {% set modes=s.attributes.get('supported_color_modes',[])\
+      \ or [] %} {% if s.domain == 'light' and s.state in ['on','off']\n  and s.entity_id not in excluded_lights\n\
+      \  and (not only_lit or s.state == 'on')\n  and modes | select('in',['hs','rgb','rgbw','rgbww','xy']) | list\
+      \ | count > 0 %}\n{% set ns.ids=ns.ids+[s.entity_id] %} {% endif %}{% endfor %}{{ ns.ids | unique | sort |\
+      \ list }}"
+- condition: template
+  value_template: '{{ bulbs | count > 0 }}'
+- variables:
+    candle_was_on: '{{ is_state(''script.natural_candlelight'',''on'') }}'
+    helpers_to_resume: '{{ pause_helpers | select(''is_state'',''on'') | list }}'
+    automations_to_resume: '{{ pause_automations | select(''is_state'',''on'') | list }}'
+    paused_color_scripts: '{% set ns=namespace(items=[]) %} {% for item in competing_color_scripts %} {% if is_state(item.entity_id,''on'')
+      and item.lights | select(''in'',bulbs) | list | count > 0 %} {% set ns.items=ns.items+[item] %} {% endif %}{%
+      endfor %}{{ ns.items }}'
+- action: input_boolean.turn_on
+  target:
+    entity_id: input_boolean.synchronized_color_cycle_active
+- if:
+  - condition: template
+    value_template: '{{ paused_color_scripts | count > 0 }}'
+  then:
+  - action: script.turn_off
+    target:
+      entity_id: '{{ paused_color_scripts | map(attribute=''entity_id'') | list }}'
+- if:
+  - condition: template
+    value_template: '{{ helpers_to_resume | count > 0 }}'
+  then:
+  - action: input_boolean.turn_off
+    target:
+      entity_id: '{{ helpers_to_resume }}'
+- if:
+  - condition: template
+    value_template: '{{ automations_to_resume | count > 0 }}'
+  then:
+  - action: automation.turn_off
+    target:
+      entity_id: '{{ automations_to_resume }}'
+    data:
+      stop_actions: true
+  - action: automation.turn_on
+    target:
+      entity_id: '{{ automations_to_resume }}'
+- if:
+  - condition: template
+    value_template: '{{ candle_was_on }}'
+  then:
+  - action: script.turn_off
+    target:
+      entity_id: script.natural_candlelight
+  - action: input_boolean.turn_off
+    target:
+      entity_id: input_boolean.natural_candlelight_active
+  - variables:
+      other_lights: '{{ states.light | selectattr(''state'',''eq'',''on'') | map(attribute=''entity_id'') | reject(''in'',bulbs)
+        | list }}'
+  - if:
+    - condition: template
+      value_template: '{{ other_lights | count > 0 }}'
+    then:
+    - action: script.turn_on
+      target:
+        entity_id: script.natural_candlelight
+      data:
+        variables:
+          lights: '{{ other_lights }}'
+          only_on: true
+          minutes: 0
+- variables:
+    hue: '{{ ((state_attr(bulbs[0],''hs_color'') or [210,85])[0] | float(210) | round(0) | int) % 360 }}'
+- repeat:
+    for_each: '{{ bulbs }}'
+    sequence:
+    - if:
+      - condition: template
+        value_template: '{{ is_state(''input_boolean.synchronized_color_cycle_active'',''on'') and states(repeat.item)
+          in [''on'',''off''] and (not only_lit or is_state(repeat.item,''on'')) }}'
+      then:
+      - action: light.turn_on
+        continue_on_error: true
+        target:
+          entity_id: '{{ repeat.item }}'
+        data:
+          hs_color: '{{ [hue | int, 85] }}'
+          brightness_pct: 65
+- delay:
+    milliseconds: 500
+- variables:
+    started: '{{ as_timestamp(now()) }}'
+- repeat:
+    while:
+    - condition: template
+      value_template: '{{ is_state(''input_boolean.synchronized_color_cycle_active'',''on'') and ((run_minutes |
+        float) == 0 or as_timestamp(now()) - (started | float) < (run_minutes | float)*60) and bulbs | select(''is_state'',''on'')
+        | list | count > 0 }}'
+    sequence:
+    - variables:
+        active_bulbs: '{{ bulbs | select(''is_state'',''on'') | list }}'
+    - if:
+      - condition: template
+        value_template: '{{ is_state(''input_boolean.synchronized_color_cycle_active'',''on'') and active_bulbs
+          | count > 0 and ((run_minutes | float) == 0 or as_timestamp(now()) - (started | float) < (run_minutes
+          | float)*60) }}'
+      then:
+      - action: light.turn_on
+        continue_on_error: true
+        target:
+          entity_id: '{{ active_bulbs }}'
+        data:
+          hs_color: '{{ [hue | int, 85] }}'
+          brightness_pct: 65
+    - variables:
+        hue: '{{ ((hue | int) + 1) % 360 }}'
+    - delay:
+        milliseconds: 150
+- repeat:
+    for_each: '{{ bulbs }}'
+    sequence:
+    - if:
+      - condition: template
+        value_template: '{{ is_state(repeat.item,''on'') }}'
+      then:
+      - action: light.turn_on
+        continue_on_error: true
+        target:
+          entity_id: '{{ repeat.item }}'
+        data: '{% set modes=state_attr(repeat.item,''supported_color_modes'') or [] %} {% if ''color_temp'' in modes
+          %} {% set lo=state_attr(repeat.item,''min_color_temp_kelvin'') | int(2000) %} {% set hi=state_attr(repeat.item,''max_color_temp_kelvin'')
+          | int(6500) %} {{ {''brightness_pct'':50, ''color_temp_kelvin'':[lo,[2000,hi]|min]|max} }} {% else %}{{
+          {''brightness_pct'':50, ''hs_color'':[30,35]} }}{% endif %}'
+- if:
+  - condition: template
+    value_template: '{{ candle_was_on }}'
+  then:
+  - action: script.turn_off
+    target:
+      entity_id: script.natural_candlelight
+  - action: script.turn_on
+    target:
+      entity_id: script.natural_candlelight
+    data:
+      variables:
+        lights: []
+        only_on: true
+        minutes: 0
+  else:
+  - if:
+    - condition: template
+      value_template: '{{ helpers_to_resume | count > 0 }}'
+    then:
+    - action: input_boolean.turn_on
+      target:
+        entity_id: '{{ helpers_to_resume }}'
+- repeat:
+    for_each: '{{ paused_color_scripts }}'
+    sequence:
+    - if:
+      - condition: template
+        value_template: '{{ repeat.item.lights | select(''is_state'',''on'') | list | count > 0 }}'
+      then:
+      - action: script.turn_on
+        continue_on_error: true
+        target:
+          entity_id: '{{ repeat.item.entity_id }}'
+- action: input_boolean.turn_off
+  target:
+    entity_id: input_boolean.synchronized_color_cycle_active

@@ -1,0 +1,8 @@
+alias: Stop Synchronized Color Cycle
+description: Stop the color cycle gracefully and return the selected lit bulbs to warm white or candlelight.
+icon: mdi:stop-circle-outline
+mode: single
+sequence:
+- action: input_boolean.turn_off
+  target:
+    entity_id: input_boolean.synchronized_color_cycle_active
