@@ -43,8 +43,8 @@ class AmbientPatterns(unittest.TestCase):
         self.assertTrue(all(g['tint']==0 for g in groups))
 
     def test_all_nine_patterns_have_bounded_changing_frames(self):
-        self.assertEqual(len(PATTERNS),9)
-        for pattern in PATTERNS:
+        self.assertEqual(len(PATTERNS),10)
+        for pattern in (p for p in PATTERNS if p != 'slow_turn_on'):
             frames=[]
             for t in range(0,600,3):
                 frame=self.render(FRAME,elapsed=t,cycle_phase=t%360,seed=1.2,dip_period=53,initial_hue=359,selected_pattern=pattern,repeat=NS(item=NS(position=2,tint=4,lights=['light.a'])))
@@ -96,5 +96,37 @@ class AmbientPatterns(unittest.TestCase):
         target=DISPATCH['then'][0]['target']['entity_id']
         self.assertEqual(self.render(target,repeat=NS(item=NS(lights=['light.a','light.off']))),['light.a'])
         self.assertEqual(self.render(LOOP['sequence'][-1]['delay']['milliseconds'],selected_pattern='ice_breath'),150)
+
+class SlowTurnOn(unittest.TestCase):
+    render = base.Templates.render
+    setUp = AmbientPatterns.setUp
+    def test_fade_is_monotonic_with_exact_endpoints(self):
+        branch=next(a['then'] for a in SEQ if a.get('if',[{}])[0].get('value_template') == "{{ selected_pattern == 'slow_turn_on' }}")
+        level=branch[1]['repeat']['sequence'][0]['variables']['fade_level']
+        for duration in [5,10,20,30]:
+            levels=[]
+            for tick in range(duration*40+1):
+                self.env.globals['now']=lambda t=tick/40:t
+                levels.append(self.render(level,fade_started=0,ramp_seconds=duration))
+            self.assertEqual((levels[0],levels[-1]),(3,204))
+            self.assertEqual(levels,sorted(levels))
+            self.assertGreater(len(set(levels)),100)
+        self.assertEqual(self.render(branch[2]['then'][0]['data'],bulbs=['light.a']),{'brightness':204,'color_temp_kelvin':2000})
+
+    def test_fade_init_and_off_bulb_guards(self):
+        init=next(a['repeat'] for a in SEQ if a.get('repeat',{}).get('for_each')=='{{ cohorts }}')
+        frame=self.render(init['sequence'][0]['then'][0]['data'],elapsed=0,seed=1.2,selected_pattern='slow_turn_on',repeat=NS(item=NS(position=0,tint=0,lights=['light.a'])))
+        self.assertEqual(frame,{'brightness_pct':1,'color_temp_kelvin':2000})
+        branch=next(a['then'] for a in SEQ if a.get('if',[{}])[0].get('value_template') == "{{ selected_pattern == 'slow_turn_on' }}")
+        dispatch=branch[1]['repeat']['sequence'][1]
+        self.assertEqual(self.render(dispatch['then'][0]['target']['entity_id'],bulbs=['light.a','light.off']),['light.a'])
+        self.assertFalse(self.render(dispatch['if'][1]['value_template'],bulbs=['light.off']))
+        self.env.globals['is_state']=lambda entity,state:False
+        self.env.tests['is_state']=self.env.globals['is_state']
+        self.assertFalse(self.render(dispatch['if'][1]['value_template'],bulbs=['light.a']))
+        self.assertFalse(any('wait_template' in action for action in branch))
+        handoff=next(a for a in SEQ if 'selected_pattern' in a.get('if',[{}])[0].get('value_template','') and 'else' in a)
+        self.assertTrue(self.render(handoff['if'][0]['value_template'],candle_was_on=False,selected_pattern='slow_turn_on'))
+        self.assertTrue(self.render(handoff['then'][1]['data']['variables']['preserve_brightness'],selected_pattern='slow_turn_on'))
 
 if __name__=='__main__':unittest.main()

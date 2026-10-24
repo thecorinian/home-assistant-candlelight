@@ -1,0 +1,32 @@
+alias: Slow Turn On
+description: "Warm-white fade from 1% to 80% over 10 seconds (adjustable 5\u201330), then automatic handoff\
+  \ to the default Natural Candlelight effect."
+icon: mdi:lightbulb-on-outline
+mode: single
+fields:
+  lights:
+    name: Bulbs
+    required: true
+    selector:
+      entity:
+        filter:
+          domain: light
+        multiple: true
+  fade_seconds:
+    name: Fade duration
+    default: 10
+    selector:
+      number:
+        min: 5
+        max: 30
+        step: 1
+        unit_of_measurement: seconds
+        mode: box
+sequence:
+- action: script.custom_lighting_patterns
+  data:
+    pattern: slow_turn_on
+    lights: '{{ lights|default([],true) }}'
+    fade_seconds: '{{ fade_seconds|default(10)|float(10) }}'
+    only_on: false
+    minutes: 0

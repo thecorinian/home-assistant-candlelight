@@ -106,14 +106,15 @@ The optional `excluded_lights`, `pause_helpers`, and `pause_automations` variabl
 
 Use the dedicated Stop script rather than Home Assistant's hard **Stop** button. Hard-stopping, reloading scripts, or restarting Home Assistant skips cleanup. To recover, stop the color worker, switch its Active helper off, and restart Natural Candlelight with `only_on: true` if wanted. The optional wind trial and color cycle should not run simultaneously. A hard sunrise stop intentionally skips color cleanup to preserve brightness for the fade; outdoor lights excluded from the fade keep their last color.
 
-## Nine custom ambient patterns
+## Custom ambient patterns and slow turn-on
 
 Install `scripts/custom_lighting_patterns.yaml` as `script.custom_lighting_patterns` and `scripts/stop_custom_lighting_patterns.yaml` as `script.stop_custom_lighting_patterns`. These use the same `input_boolean.synchronized_color_cycle_active` helper and base candlelight installation as the synchronized cycle above. Update both the nightly automation and sunrise script. The color cycle and custom patterns are mutually exclusive: stop the active effect before starting another.
 
-Run **Custom Lighting Patterns**, choose a **Pattern** and **Bulbs**, and set **Duration** (zero is continuous). Use **Stop Custom Lighting Patterns** to stop gracefully. Only explicitly selected targets are used; normal house schedules keep their existing exclusions. All nine are original scripted approximations, not claims of physical simulation or comparisons against every manufacturer's scene catalog.
+Run **Custom Lighting Patterns**, choose a **Pattern** and **Bulbs**, and set **Duration** (zero is continuous). Use **Stop Custom Lighting Patterns** to stop gracefully. Only explicitly selected targets are used; normal house schedules keep their existing exclusions. The nine ambient effects are original scripted approximations, not claims of physical simulation or comparisons against every manufacturer's scene catalog.
 
 | Pattern | Appearance |
 | --- | --- |
+| Slow Turn On | Warm-white 1% → 80% over 10 seconds (adjustable 5–30), then Natural Candlelight. |
 | Ice Breath | Synchronized breaths from pure RGB white to saturated blue and back at a constant 100% brightness, using one-degree phase steps and 150 ms pacing. |
 | Molten Glass | Amber, rose-orange and gold drift with slow irregular brightness swells. |
 | Aurora | Light blue → violet → green → light blue in about 34 seconds (11.25 seconds per transition), smoothly blended; paired bulbs use adjustable color separation. |
@@ -131,3 +132,9 @@ Frames use elapsed time, several waves with different periods, a randomized star
 The three white patterns can use dimmable white bulbs; color patterns require a color mode. A hue fallback approximates warm white when a color bulb lacks color-temperature control. Most custom pattern commands stay within 10–85% brightness, with tighter limits in individual patterns. Ice Breath holds a constant 100% brightness command; saturated blue may still look dimmer than white. Nightly candlelight continues on the other existing lit bulbs; the Stop control and timer use the same warm-white/candlelight handback as the synchronized cycle. Hard stopping or restarting Home Assistant still skips cleanup.
 
 Ice Breath sends one shared frame to all selected on bulbs. Its white is a zero-saturation RGB approximation, allowing continuous color mixing without switching between native white and color modes. The white-to-blue envelope uses an eased sinusoid. The approved full color cycle remains unchanged.
+
+## Slow turn-on
+
+Update Custom Lighting Patterns, then install `scripts/slow_turn_on.yaml` as **Slow Turn On**. Select bulbs and run it: each starts at 1% in warm white, then all selected still-on bulbs rise together to 80% over 10 seconds. The duration is adjustable from 5–30 seconds. It uses an eased monotonic brightness curve and 150 ms pacing with changed levels only; elapsed time sets the progress, so service latency does not accumulate into extra programmed fade time. Actual bulb response still depends on the integration.
+
+After reaching 80%, the script automatically hands off to the default Natural Candlelight controller. This handoff preserves current brightness and seeds the selected bulbs at 80%, avoiding the normal 50% startup reset. Candlelight brightness commands include supported warm-white color temperature to prevent a previous color mode from returning. Other eligible lit bulbs remain included; off bulbs stay off. This is a manually invoked script, not a new schedule or a house-wide automatic turn-on rule. It can also be called from an automation's actions.

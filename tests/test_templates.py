@@ -32,6 +32,33 @@ class Templates(unittest.TestCase):
   kw.setdefault('baseline_blend_seconds',20)
   result=self.compiled[t].render(**kw)
   return ast.literal_eval(result.strip()) if isinstance(result,str) else result
+ def test_handoff_preserves_brightness_and_default_still_starts_at_fifty(self):
+  init=next(a['variables'] for a in SCRIPT['sequence'] if 'prepared_bulbs' in a.get('variables',{}))
+  self.env.globals['state_attr']=lambda entity,attr:102 if entity=='light.b' else 204
+  args=dict(preserve_start=True,bulbs=['light.a','light.b'],handoff_levels={'light.a':80})
+  self.assertEqual(self.render(init['last_levels'],**args),{'light.a':80,'light.b':40})
+  self.assertEqual(self.render(init['baseline_target'],preserve_start=True),80)
+  self.assertEqual(self.render(init['baseline_target'],preserve_start=False),50)
+  self.assertEqual(self.render(init['last_levels'],preserve_start=False),{})
+
+ def test_brightness_updates_explicitly_keep_supported_warm_white(self):
+  commands=[]
+  def collect(node):
+   if isinstance(node,dict):
+    if node.get('action')=='light.turn_on' and node.get('target',{}).get('entity_id')=="{{ cohort | select('is_state', 'on') | list }}":commands.append(node)
+    for v in node.values():collect(v)
+   elif isinstance(node,list):
+    for v in node:collect(v)
+  collect(SCRIPT)
+  self.assertEqual(len(commands),1)
+  self.env.tests['is_state']=lambda entity,state:True
+  attrs={'supported_color_modes':['hs','color_temp'],'min_color_temp_kelvin':2200,'max_color_temp_kelvin':6500}
+  self.env.globals['state_attr']=lambda entity,attr:attrs.get(attr)
+  data=commands[0]['data']
+  self.assertEqual(self.render(data,cohort=['light.a'],level=80),{'brightness_pct':80,'color_temp_kelvin':2200})
+  attrs['supported_color_modes']=['brightness']
+  self.assertEqual(self.render(data,cohort=['light.a'],level=80),{'brightness_pct':80})
+
  def test_only_on_never_selects_off_or_unavailable(self):
   self.assertEqual(self.render(FILTER,requested=[],only_lit=True,excluded_lights=[]),['light.a'])
   self.assertEqual(self.render(FILTER,requested=[],only_lit=True,excluded_lights=['light.a']),[])
