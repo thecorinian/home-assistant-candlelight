@@ -48,7 +48,7 @@ class AmbientPatterns(unittest.TestCase):
             frames=[]
             for t in range(0,600,3):
                 frame=self.render(FRAME,elapsed=t,cycle_phase=t%360,seed=1.2,dip_period=53,initial_hue=359,selected_pattern=pattern,repeat=NS(item=NS(position=2,tint=4,lights=['light.a'])))
-                self.assertTrue((1 if pattern=='ice_breath' else 10)<=frame['brightness_pct']<=(100 if pattern=='ice_breath' else 85),(pattern,frame))
+                self.assertTrue((100 if pattern=='ice_breath' else 10)<=frame['brightness_pct']<=(100 if pattern=='ice_breath' else 85),(pattern,frame))
                 if 'hs_color' in frame:
                     self.assertTrue(0<=frame['hs_color'][0]<360)
                     self.assertTrue(0<=frame['hs_color'][1]<=100)
@@ -83,7 +83,7 @@ class AmbientPatterns(unittest.TestCase):
         white=self.render(FRAME,cycle_phase=0,**args)
         blue=self.render(FRAME,cycle_phase=180,**args)
         self.assertEqual(white,{'brightness_pct':100,'hs_color':[240,0]})
-        self.assertEqual(blue,{'brightness_pct':1,'hs_color':[240,100]})
+        self.assertEqual(blue,{'brightness_pct':100,'hs_color':[240,100]})
         cohorts=self.render(INIT['cohorts'],bulbs=['light.a','light.b'],selected_pattern='ice_breath')
         self.assertEqual(cohorts,[{'lights':['light.a','light.b'],'position':0,'tint':0}])
         target=DISPATCH['then'][0]['target']['entity_id']

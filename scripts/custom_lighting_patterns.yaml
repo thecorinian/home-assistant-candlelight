@@ -225,10 +225,10 @@ sequence:
           \ %}\n{% set warm=selected_pattern in ['cloudlight','incandescent_shimmer','stair_cascade'] %}\n{% set\
           \ h=25 %}{% set sat=80 %}{% set k=2700 %}{% set b=50 %}\n{% if selected_pattern == 'ice_breath' %}\n \
           \ {% set u=0.5-0.5*sin(0.017453292519943295*(cycle_phase|float)+1.5707963267948966) %}{% set breath=u*u*(3-2*u)\
-          \ %}\n  {% set h=240 %}{% set sat=100*breath %}{% set b=100-99*breath %}\n{% elif selected_pattern ==\
-          \ 'molten_glass' %}\n  {% set h=12+32*n+8*sin(0.043*t+s) %}{% set sat=75+8*sin(0.027*t+s) %}{% set b=30+48*n\
-          \ %}\n{% elif selected_pattern == 'aurora' %}\n  {% set h=140+100*n+15*sin(0.041*t-0.4*p)+repeat.item.tint|float\
-          \ %}{% set sat=72+16*n %}{% set b=32+40*n %}\n{% elif selected_pattern == 'cloudlight' %}\n  {% set cloud=(0.5+0.5*sin(0.067*t+s))**3\
+          \ %}\n  {% set h=240 %}{% set sat=100*breath %}{% set b=100 %}\n{% elif selected_pattern == 'molten_glass'\
+          \ %}\n  {% set h=12+32*n+8*sin(0.043*t+s) %}{% set sat=75+8*sin(0.027*t+s) %}{% set b=30+48*n %}\n{% elif\
+          \ selected_pattern == 'aurora' %}\n  {% set h=140+100*n+15*sin(0.041*t-0.4*p)+repeat.item.tint|float %}{%\
+          \ set sat=72+16*n %}{% set b=32+40*n %}\n{% elif selected_pattern == 'cloudlight' %}\n  {% set cloud=(0.5+0.5*sin(0.067*t+s))**3\
           \ %}{% set b=76-43*cloud+2*sin(0.029*t+2*s) %}{% set k=3300 %}\n{% elif selected_pattern == 'ember_bed'\
           \ %}\n  {% set bloom=([0,sin(0.089*t+s)]|max)**12 %}{% set h=9+12*n %}{% set sat=86 %}{% set b=20+25*n+25*bloom\
           \ %}\n{% elif selected_pattern == 'incandescent_shimmer' %}\n  {% set q=((t+s*5) % (dip_period|float))-(dip_period|float)/2\
@@ -270,9 +270,9 @@ sequence:
               \ %}\n{% set warm=selected_pattern in ['cloudlight','incandescent_shimmer','stair_cascade'] %}\n{%\
               \ set h=25 %}{% set sat=80 %}{% set k=2700 %}{% set b=50 %}\n{% if selected_pattern == 'ice_breath'\
               \ %}\n  {% set u=0.5-0.5*sin(0.017453292519943295*(cycle_phase|float)+1.5707963267948966) %}{% set\
-              \ breath=u*u*(3-2*u) %}\n  {% set h=240 %}{% set sat=100*breath %}{% set b=100-99*breath %}\n{% elif\
-              \ selected_pattern == 'molten_glass' %}\n  {% set h=12+32*n+8*sin(0.043*t+s) %}{% set sat=75+8*sin(0.027*t+s)\
-              \ %}{% set b=30+48*n %}\n{% elif selected_pattern == 'aurora' %}\n  {% set h=140+100*n+15*sin(0.041*t-0.4*p)+repeat.item.tint|float\
+              \ breath=u*u*(3-2*u) %}\n  {% set h=240 %}{% set sat=100*breath %}{% set b=100 %}\n{% elif selected_pattern\
+              \ == 'molten_glass' %}\n  {% set h=12+32*n+8*sin(0.043*t+s) %}{% set sat=75+8*sin(0.027*t+s) %}{%\
+              \ set b=30+48*n %}\n{% elif selected_pattern == 'aurora' %}\n  {% set h=140+100*n+15*sin(0.041*t-0.4*p)+repeat.item.tint|float\
               \ %}{% set sat=72+16*n %}{% set b=32+40*n %}\n{% elif selected_pattern == 'cloudlight' %}\n  {% set\
               \ cloud=(0.5+0.5*sin(0.067*t+s))**3 %}{% set b=76-43*cloud+2*sin(0.029*t+2*s) %}{% set k=3300 %}\n\
               {% elif selected_pattern == 'ember_bed' %}\n  {% set bloom=([0,sin(0.089*t+s)]|max)**12 %}{% set h=9+12*n\

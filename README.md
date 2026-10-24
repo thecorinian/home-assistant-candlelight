@@ -114,7 +114,7 @@ Run **Custom Lighting Patterns**, choose a **Pattern** and **Bulbs**, and set **
 
 | Pattern | Appearance |
 | --- | --- |
-| Ice Breath | Synchronized breaths from pure RGB white at 100% to saturated blue at 1% and back, using one-degree phase steps and 150 ms pacing. |
+| Ice Breath | Synchronized breaths from pure RGB white to saturated blue and back at a constant 100% brightness, using one-degree phase steps and 150 ms pacing. |
 | Molten Glass | Amber, rose-orange and gold drift with slow irregular brightness swells. |
 | Aurora | Teal through blue-violet with slow waves; paired bulbs may have a small tint spread. |
 | Clouds over Sunlight | Warm white with broad, soft dimming and clearing. |
@@ -128,6 +128,6 @@ Configure `linked_pairs` in the custom script as lists of bulb entity IDs sharin
 
 Frames use elapsed time, several waves with different periods, a randomized starting phase and dip period, and smooth analytic envelopes. Custom frames dispatch per bulb (to respect individual color-temperature limits) then pause at least 250 ms; actual timing includes service latency. Large selections can look slower or less synchronized and generate more cloud requests. These scripts use no sound or motion sensors. A string light is controlled as one whole light; no per-segment effects are implied.
 
-The three white patterns can use dimmable white bulbs; color patterns require a color mode. A hue fallback approximates warm white when a color bulb lacks color-temperature control. Most custom pattern commands stay within 10–85% brightness, with tighter limits in individual patterns. Ice Breath deliberately spans 1–100%. Nightly candlelight continues on the other existing lit bulbs; the Stop control and timer use the same warm-white/candlelight handback as the synchronized cycle. Hard stopping or restarting Home Assistant still skips cleanup.
+The three white patterns can use dimmable white bulbs; color patterns require a color mode. A hue fallback approximates warm white when a color bulb lacks color-temperature control. Most custom pattern commands stay within 10–85% brightness, with tighter limits in individual patterns. Ice Breath holds a constant 100% brightness command; saturated blue may still look dimmer than white. Nightly candlelight continues on the other existing lit bulbs; the Stop control and timer use the same warm-white/candlelight handback as the synchronized cycle. Hard stopping or restarting Home Assistant still skips cleanup.
 
 Ice Breath sends one shared frame to all selected on bulbs. Its white is a zero-saturation RGB approximation, allowing continuous color mixing without switching between native white and color modes. The white-to-blue envelope uses an eased sinusoid. The approved full color cycle remains unchanged.
