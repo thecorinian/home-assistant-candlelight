@@ -116,7 +116,7 @@ Run **Custom Lighting Patterns**, choose a **Pattern** and **Bulbs**, and set **
 | --- | --- |
 | Ice Breath | Synchronized breaths from pure RGB white to saturated blue and back at a constant 100% brightness, using one-degree phase steps and 150 ms pacing. |
 | Molten Glass | Amber, rose-orange and gold drift with slow irregular brightness swells. |
-| Aurora | Teal through blue-violet with slow waves; paired bulbs use adjustable color separation. |
+| Aurora | Light blue → violet → green → light blue, smoothly blended; paired bulbs use adjustable color separation. |
 | Clouds over Sunlight | Warm white with broad, soft dimming and clearing. |
 | Ember Bed | Deep orange with slow movement and occasional glowing blooms. |
 | Incandescent Shimmer | Warm white, small continuous brightness variation and occasional brief dips. |

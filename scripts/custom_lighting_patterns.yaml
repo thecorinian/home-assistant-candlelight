@@ -228,18 +228,20 @@ sequence:
           \ {% set u=0.5-0.5*sin(0.017453292519943295*(cycle_phase|float)+1.5707963267948966) %}{% set breath=u*u*(3-2*u)\
           \ %}\n  {% set h=240 %}{% set sat=100*breath %}{% set b=100 %}\n{% elif selected_pattern == 'molten_glass'\
           \ %}\n  {% set h=12+32*n+8*sin(0.043*t+s) %}{% set sat=75+8*sin(0.027*t+s) %}{% set b=30+48*n %}\n{% elif\
-          \ selected_pattern == 'aurora' %}\n  {% set h=140+100*n+15*sin(0.041*t-0.4*p)+repeat.item.tint|float %}{%\
-          \ set sat=72+16*n %}{% set b=32+40*n %}\n{% elif selected_pattern == 'cloudlight' %}\n  {% set cloud=(0.5+0.5*sin(0.067*t+s))**3\
-          \ %}{% set b=76-43*cloud+2*sin(0.029*t+2*s) %}{% set k=3300 %}\n{% elif selected_pattern == 'ember_bed'\
-          \ %}\n  {% set bloom=([0,sin(0.089*t+s)]|max)**12 %}{% set h=9+12*n %}{% set sat=86 %}{% set b=20+25*n+25*bloom\
-          \ %}\n{% elif selected_pattern == 'incandescent_shimmer' %}\n  {% set q=((t+s*5) % (dip_period|float))-(dip_period|float)/2\
-          \ %}\n  {% set dip=2.718281828**(-((q/0.7)**2)) %}\n  {% set b=65+2*sin(1.8*t+s)+1.4*sin(3.17*t+2*s)-28*dip\
-          \ %}{% set k=2600 %}\n{% elif selected_pattern == 'open_floor_wave' %}\n  {% set wave=sin(0.04*t-0.9*p+s)\
-          \ %}{% set h=190+40*wave+25*sin(0.017*t+s) %}{% set sat=75 %}{% set b=45+20*wave %}\n{% elif selected_pattern\
-          \ == 'stair_cascade' %}\n  {% set b=30+45*(0.5+0.5*sin(0.24*t-0.9*p+s))**2 %}{% set k=2700 %}\n{% elif\
-          \ selected_pattern == 'backyard_echo' %}\n  {% set h=(initial_hue|float)+2*t-30*p %}{% set sat=85 %}{%\
-          \ set b=55+10*sin(0.05*t-0.7*p+s) %}\n{% endif %}\n{% set level=([1,[100,b]|min]|max|round(0)|int) if\
-          \ selected_pattern == 'ice_breath' else ([10,[85,b]|min]|max|round(0)|int) %}\n{% set modes=state_attr(repeat.item.lights[0],'supported_color_modes')\
+          \ selected_pattern == 'aurora' %}\n  {% set q=(t/36-0.12*p)%3 %}{% set i=q|int %}{% set u=q-i %}{% set\
+          \ mix=u*u*(3-2*u) %}\n  {% set palette_h=[200,275,130,200] %}{% set palette_s=[45,80,80,45] %}\n  {% set\
+          \ h=[120,[285,palette_h[i]+(palette_h[i+1]-palette_h[i])*mix+(repeat.item.tint|float)]|min]|max %}\n \
+          \ {% set sat=palette_s[i]+(palette_s[i+1]-palette_s[i])*mix %}{% set b=60+20*n %}\n{% elif selected_pattern\
+          \ == 'cloudlight' %}\n  {% set cloud=(0.5+0.5*sin(0.067*t+s))**3 %}{% set b=76-43*cloud+2*sin(0.029*t+2*s)\
+          \ %}{% set k=3300 %}\n{% elif selected_pattern == 'ember_bed' %}\n  {% set bloom=([0,sin(0.089*t+s)]|max)**12\
+          \ %}{% set h=9+12*n %}{% set sat=86 %}{% set b=20+25*n+25*bloom %}\n{% elif selected_pattern == 'incandescent_shimmer'\
+          \ %}\n  {% set q=((t+s*5) % (dip_period|float))-(dip_period|float)/2 %}\n  {% set dip=2.718281828**(-((q/0.7)**2))\
+          \ %}\n  {% set b=65+2*sin(1.8*t+s)+1.4*sin(3.17*t+2*s)-28*dip %}{% set k=2600 %}\n{% elif selected_pattern\
+          \ == 'open_floor_wave' %}\n  {% set wave=sin(0.04*t-0.9*p+s) %}{% set h=190+40*wave+25*sin(0.017*t+s)\
+          \ %}{% set sat=75 %}{% set b=45+20*wave %}\n{% elif selected_pattern == 'stair_cascade' %}\n  {% set b=30+45*(0.5+0.5*sin(0.24*t-0.9*p+s))**2\
+          \ %}{% set k=2700 %}\n{% elif selected_pattern == 'backyard_echo' %}\n  {% set h=(initial_hue|float)+2*t-30*p\
+          \ %}{% set sat=85 %}{% set b=55+10*sin(0.05*t-0.7*p+s) %}\n{% endif %}\n{% set level=([1,[100,b]|min]|max|round(0)|int)\
+          \ if selected_pattern == 'ice_breath' else ([10,[85,b]|min]|max|round(0)|int) %}\n{% set modes=state_attr(repeat.item.lights[0],'supported_color_modes')\
           \ or [] %}\n{% if warm and 'color_temp' in modes %}\n  {% set lo=state_attr(repeat.item.lights[0],'min_color_temp_kelvin')|int(2000)\
           \ %}\n  {% set hi=state_attr(repeat.item.lights[0],'max_color_temp_kelvin')|int(6500) %}\n  {{ {'brightness_pct':level,'color_temp_kelvin':[lo,[k,hi]|min]|max}\
           \ }}\n{% elif warm and modes|select('in',['hs','rgb','rgbw','rgbww','xy'])|list|count > 0 %}\n  {{ {'brightness_pct':level,'hs_color':[30,28\
@@ -273,11 +275,13 @@ sequence:
               \ %}\n  {% set u=0.5-0.5*sin(0.017453292519943295*(cycle_phase|float)+1.5707963267948966) %}{% set\
               \ breath=u*u*(3-2*u) %}\n  {% set h=240 %}{% set sat=100*breath %}{% set b=100 %}\n{% elif selected_pattern\
               \ == 'molten_glass' %}\n  {% set h=12+32*n+8*sin(0.043*t+s) %}{% set sat=75+8*sin(0.027*t+s) %}{%\
-              \ set b=30+48*n %}\n{% elif selected_pattern == 'aurora' %}\n  {% set h=140+100*n+15*sin(0.041*t-0.4*p)+repeat.item.tint|float\
-              \ %}{% set sat=72+16*n %}{% set b=32+40*n %}\n{% elif selected_pattern == 'cloudlight' %}\n  {% set\
-              \ cloud=(0.5+0.5*sin(0.067*t+s))**3 %}{% set b=76-43*cloud+2*sin(0.029*t+2*s) %}{% set k=3300 %}\n\
-              {% elif selected_pattern == 'ember_bed' %}\n  {% set bloom=([0,sin(0.089*t+s)]|max)**12 %}{% set h=9+12*n\
-              \ %}{% set sat=86 %}{% set b=20+25*n+25*bloom %}\n{% elif selected_pattern == 'incandescent_shimmer'\
+              \ set b=30+48*n %}\n{% elif selected_pattern == 'aurora' %}\n  {% set q=(t/36-0.12*p)%3 %}{% set i=q|int\
+              \ %}{% set u=q-i %}{% set mix=u*u*(3-2*u) %}\n  {% set palette_h=[200,275,130,200] %}{% set palette_s=[45,80,80,45]\
+              \ %}\n  {% set h=[120,[285,palette_h[i]+(palette_h[i+1]-palette_h[i])*mix+(repeat.item.tint|float)]|min]|max\
+              \ %}\n  {% set sat=palette_s[i]+(palette_s[i+1]-palette_s[i])*mix %}{% set b=60+20*n %}\n{% elif selected_pattern\
+              \ == 'cloudlight' %}\n  {% set cloud=(0.5+0.5*sin(0.067*t+s))**3 %}{% set b=76-43*cloud+2*sin(0.029*t+2*s)\
+              \ %}{% set k=3300 %}\n{% elif selected_pattern == 'ember_bed' %}\n  {% set bloom=([0,sin(0.089*t+s)]|max)**12\
+              \ %}{% set h=9+12*n %}{% set sat=86 %}{% set b=20+25*n+25*bloom %}\n{% elif selected_pattern == 'incandescent_shimmer'\
               \ %}\n  {% set q=((t+s*5) % (dip_period|float))-(dip_period|float)/2 %}\n  {% set dip=2.718281828**(-((q/0.7)**2))\
               \ %}\n  {% set b=65+2*sin(1.8*t+s)+1.4*sin(3.17*t+2*s)-28*dip %}{% set k=2600 %}\n{% elif selected_pattern\
               \ == 'open_floor_wave' %}\n  {% set wave=sin(0.04*t-0.9*p+s) %}{% set h=190+40*wave+25*sin(0.017*t+s)\

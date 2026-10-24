@@ -61,6 +61,13 @@ class AmbientPatterns(unittest.TestCase):
         self.assertEqual(frames[0]['brightness_pct'],frames[1]['brightness_pct'])
         self.assertAlmostEqual(frames[1]['hs_color'][0]-frames[0]['hs_color'][0],8)
 
+    def test_aurora_reaches_requested_blue_violet_green_palette(self):
+        args=dict(seed=1.2,dip_period=53,initial_hue=0,selected_pattern='aurora',repeat=NS(item=NS(position=0,tint=0,lights=['light.a'])))
+        for elapsed,color in [(0,[200,45]),(22.5,[275,80]),(45,[130,80]),(67.5,[200,45])]:
+            frame=self.render(FRAME,elapsed=elapsed,**args)
+            self.assertEqual(frame['hs_color'],color)
+            self.assertTrue(60<=frame['brightness_pct']<=80)
+
     def test_stop_deadline_and_off_bulbs_block_dispatch(self):
         args=dict(run_minutes=0,started=0,repeat=NS(item=NS(lights=['light.a'])))
         self.env.globals['now']=lambda:3600
