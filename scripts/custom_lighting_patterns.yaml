@@ -228,7 +228,7 @@ sequence:
           \ {% set u=0.5-0.5*sin(0.017453292519943295*(cycle_phase|float)+1.5707963267948966) %}{% set breath=u*u*(3-2*u)\
           \ %}\n  {% set h=240 %}{% set sat=100*breath %}{% set b=100 %}\n{% elif selected_pattern == 'molten_glass'\
           \ %}\n  {% set h=12+32*n+8*sin(0.043*t+s) %}{% set sat=75+8*sin(0.027*t+s) %}{% set b=30+48*n %}\n{% elif\
-          \ selected_pattern == 'aurora' %}\n  {% set q=(t/36-0.12*p)%3 %}{% set i=q|int %}{% set u=q-i %}{% set\
+          \ selected_pattern == 'aurora' %}\n  {% set q=(t/18-0.12*p)%3 %}{% set i=q|int %}{% set u=q-i %}{% set\
           \ mix=u*u*(3-2*u) %}\n  {% set palette_h=[200,275,130,200] %}{% set palette_s=[45,80,80,45] %}\n  {% set\
           \ h=[120,[285,palette_h[i]+(palette_h[i+1]-palette_h[i])*mix+(repeat.item.tint|float)]|min]|max %}\n \
           \ {% set sat=palette_s[i]+(palette_s[i+1]-palette_s[i])*mix %}{% set b=60+20*n %}\n{% elif selected_pattern\
@@ -275,7 +275,7 @@ sequence:
               \ %}\n  {% set u=0.5-0.5*sin(0.017453292519943295*(cycle_phase|float)+1.5707963267948966) %}{% set\
               \ breath=u*u*(3-2*u) %}\n  {% set h=240 %}{% set sat=100*breath %}{% set b=100 %}\n{% elif selected_pattern\
               \ == 'molten_glass' %}\n  {% set h=12+32*n+8*sin(0.043*t+s) %}{% set sat=75+8*sin(0.027*t+s) %}{%\
-              \ set b=30+48*n %}\n{% elif selected_pattern == 'aurora' %}\n  {% set q=(t/36-0.12*p)%3 %}{% set i=q|int\
+              \ set b=30+48*n %}\n{% elif selected_pattern == 'aurora' %}\n  {% set q=(t/18-0.12*p)%3 %}{% set i=q|int\
               \ %}{% set u=q-i %}{% set mix=u*u*(3-2*u) %}\n  {% set palette_h=[200,275,130,200] %}{% set palette_s=[45,80,80,45]\
               \ %}\n  {% set h=[120,[285,palette_h[i]+(palette_h[i+1]-palette_h[i])*mix+(repeat.item.tint|float)]|min]|max\
               \ %}\n  {% set sat=palette_s[i]+(palette_s[i+1]-palette_s[i])*mix %}{% set b=60+20*n %}\n{% elif selected_pattern\

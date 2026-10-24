@@ -63,7 +63,7 @@ class AmbientPatterns(unittest.TestCase):
 
     def test_aurora_reaches_requested_blue_violet_green_palette(self):
         args=dict(seed=1.2,dip_period=53,initial_hue=0,selected_pattern='aurora',repeat=NS(item=NS(position=0,tint=0,lights=['light.a'])))
-        for elapsed,color in [(0,[200,45]),(22.5,[275,80]),(45,[130,80]),(67.5,[200,45])]:
+        for elapsed,color in [(0,[200,45]),(11.25,[275,80]),(22.5,[130,80]),(33.75,[200,45])]:
             frame=self.render(FRAME,elapsed=elapsed,**args)
             self.assertEqual(frame['hs_color'],color)
             self.assertTrue(60<=frame['brightness_pct']<=80)
