@@ -59,7 +59,7 @@ Children's entities are excluded during alternate absent weeks. Local wall-clock
 
 ## Manual control and verification limits
 
-A direct Home Assistant light on/off/brightness/color command creates a persistent fixture hold until the next 4 AM local reset. Expected schedule power acknowledgments are ignored for a short window. The daily reset also catches up after downtime; initial activation preserves existing holds. Resume Automatic Lighting clears selected holds, or all with an empty selection; the controller then rejoins the current phase.
+A direct Home Assistant light on/off/brightness/color command creates a persistent fixture hold until the next 4 AM local reset. Expected schedule power acknowledgments are ignored for a short window. The guard ignores unattributed service calls and the first 90 seconds of bulb state feedback after startup or automation reload, preventing initial cloud synchronization from creating false holds. Authenticated direct commands remain protected during that interval. The daily reset also catches up after downtime; initial activation preserves existing holds. Resume Automatic Lighting clears selected holds, or all with an empty selection; the controller then rejoins the current phase.
 
 The registry uses an `h:` prefix plus eight-character SHA256 tokens, up to 31 held entities. The prefix prevents numeric-looking token strings from being reinterpreted. Updates are queued; malformed state, capacity overflow or a detected collision fails closed with `*`. This encoding is not a security mechanism. Expected-power marker helpers also support at most 31 targets per batch.
 

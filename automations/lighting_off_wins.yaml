@@ -1,6 +1,7 @@
 alias: Lighting Off Wins
 description: Persist manual fixture overrides. In daily mode manual on, off, brightness and color commands pause
-  schedule writes until the daily reset. Ignore expected schedule power feedback.
+  schedule writes until the daily reset. Ignore expected schedule power feedback. Ignore unattributed service calls
+  and the first 90 seconds of state feedback after this guard starts; direct authenticated commands remain active.
 mode: parallel
 max: 40
 max_exceeded: silent
@@ -23,7 +24,7 @@ variables:
     %}{% if trigger.id==''state_change'' %}
 
     {% if d.entity_id.startswith(''light.'') and d.old_state is not none and d.new_state is not none and d.new_state.context.parent_id
-    is none %}
+    is none and (this is not defined or as_timestamp(now())-as_timestamp(this.last_changed)>=90) %}
 
     {% if d.old_state.state==''on'' and d.new_state.state==''off'' %}{% set h=''input_text.lighting_schedule_off_targets''
     %}{% if daily and (d.entity_id|sha256)[:8] in states(h) and as_timestamp(now())-as_timestamp(states[h].last_changed)<30
@@ -36,8 +37,8 @@ variables:
     {% else %}ignore{% endif %}
 
     {% else %}{% if d.domain in [''light'',''homeassistant''] and d.service in [''turn_off'',''turn_on''] and trigger.event.context.parent_id
-    is none %}{{ ''hold'' if d.service==''turn_off'' else ''manual_on'' if daily else ''release'' }}{% else %}ignore{%
-    endif %}{% endif %}'
+    is none and trigger.event.context.user_id is not none %}{{ ''hold'' if d.service==''turn_off'' else ''manual_on''
+    if daily else ''release'' }}{% else %}ignore{% endif %}{% endif %}'
 conditions:
 - condition: template
   value_template: '{{ operation|trim in [''hold'',''release'',''manual_on''] and not is_state(''script.sunrise_fade_off'',''on'')

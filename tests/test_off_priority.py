@@ -22,12 +22,12 @@ class OffPriority(unittest.TestCase):
   self.assertEqual(self.operation('on','off',parent='effect'),'ignore')
  def test_direct_off_and_on_but_not_effect_services(self):
   for service,parent,expected in [('turn_off',None,'hold'),('turn_on',None,'release'),('turn_off','effect','ignore'),('turn_on','effect','ignore')]:
-   t=NS(id='service_change',event=NS(context=NS(parent_id=parent),data=NS(domain='light',service=service)))
+   t=NS(id='service_change',event=NS(context=NS(parent_id=parent,user_id='user'),data=NS(domain='light',service=service)))
    self.assertEqual(self.env.from_string(AUTO['variables']['operation']).render(trigger=t).strip(),expected)
  def test_daily_direct_on_and_color_commands_create_manual_hold(self):
   self.env.globals['is_state']=lambda e,s:e=='input_boolean.daily_lighting_schedule_active'
   for svc,expected in [('turn_on','manual_on'),('turn_off','hold')]:
-   t=NS(id='service_change',event=NS(context=NS(parent_id=None),data=NS(domain='light',service=svc)))
+   t=NS(id='service_change',event=NS(context=NS(parent_id=None,user_id='user'),data=NS(domain='light',service=svc)))
    self.assertEqual(self.env.from_string(AUTO['variables']['operation']).render(trigger=t).strip(),expected)
  def test_daily_expected_power_acknowledgments_are_not_manual_overrides(self):
   self.env.globals['is_state']=lambda e,s:e=='input_boolean.daily_lighting_schedule_active'
@@ -42,6 +42,19 @@ class OffPriority(unittest.TestCase):
   self.env.globals['now']=lambda:31
   self.assertEqual(self.operation('on','off'),'hold')
   self.assertEqual(self.operation('off','on',2),'manual_on')
+ def test_startup_state_feedback_does_not_create_holds(self):
+  self.env.globals['this']=NS(last_changed=0)
+  self.env.globals['now']=lambda:30
+  self.assertEqual(self.operation('on','off'),'ignore')
+  self.assertEqual(self.operation('off','on'),'ignore')
+  self.env.globals['now']=lambda:91
+  self.assertEqual(self.operation('on','off'),'hold')
+ def test_authenticated_commands_work_during_startup_but_unattributed_calls_do_not(self):
+  self.env.globals['this']=NS(last_changed=0)
+  self.env.globals['now']=lambda:30
+  for user,expected in [('user','hold'),(None,'ignore')]:
+   t=NS(id='service_change',event=NS(context=NS(parent_id=None,user_id=user),data=NS(domain='light',service='turn_off')))
+   self.assertEqual(self.env.from_string(AUTO['variables']['operation']).render(trigger=t).strip(),expected)
  def update(self,stored,ids,op='hold'):
   return self.env.from_string(REGISTRY['sequence'][1]['variables']['updated']).render(stored=NS(value=stored),ids=ids,op=op).strip()
  def test_registry_adds_releases_and_preserves_previous_holds(self):
