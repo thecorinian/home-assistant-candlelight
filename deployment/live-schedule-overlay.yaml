@@ -1,0 +1,17 @@
+# Live deployment overlay
+# Applied to /config/scripts.yaml on the Home Assistant host.
+
+daily_lighting_controller:
+  variables:
+    excluded_lights: []
+    bathroom_filter: "'bathroom' not in s.entity_id"
+    cutoff: "10:00"
+    weather_day_brightness_pct: 15
+    weather_color_motifs: false
+    weather_entity: weather.forecast_home
+
+# Core daytime decision:
+# clear weather -> 0%
+# overcast/rain/snow/hail/fog -> 15% if the light is already eligible
+# temperature adjusts white balance only
+# bathroom entities are excluded from automatic scheduling
