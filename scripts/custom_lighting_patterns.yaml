@@ -1,6 +1,6 @@
 alias: Custom Lighting Patterns
 description: Nine custom patterns for selected bulbs. Paired dome bulbs share brightness and motion; Aurora offers
-  a gentle tint difference. Use Stop Custom Lighting Patterns to return to candlelight.
+  adjustable color separation. Use Stop Custom Lighting Patterns to return to candlelight.
 icon: mdi:palette
 mode: single
 fields:
@@ -66,12 +66,13 @@ fields:
         multiple: true
   pair_tint:
     name: Aurora dome tint spread
-    description: Hue difference between paired bulbs. Zero keeps matching colors. Only used by Aurora.
-    default: 8
+    description: Hue difference between paired bulbs. Default 60 gives a distinct teal/blue blend. Zero keeps matching
+      colors. Only used by Aurora.
+    default: 60
     selector:
       number:
         min: 0
-        max: 20
+        max: 90
         step: 1
         mode: slider
         unit_of_measurement: degrees
@@ -94,7 +95,7 @@ sequence:
     selected_pattern: '{{ pattern|default(''molten_glass'') }}'
     ordered_ids: '{{ [fixture_order] if fixture_order is defined and fixture_order is string else fixture_order|default([],true)
       }}'
-    tint_spread: '{{ [0,[20,pair_tint|default(8)|float(8)]|min]|max }}'
+    tint_spread: '{{ [0,[90,pair_tint|default(60)|float(60)]|min]|max }}'
 - condition: template
   value_template: '{{ selected_pattern in [''molten_glass'', ''aurora'', ''cloudlight'', ''ember_bed'', ''incandescent_shimmer'',
     ''open_floor_wave'', ''stair_cascade'', ''backyard_echo'', ''ice_breath''] }}'

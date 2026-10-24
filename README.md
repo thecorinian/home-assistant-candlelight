@@ -116,7 +116,7 @@ Run **Custom Lighting Patterns**, choose a **Pattern** and **Bulbs**, and set **
 | --- | --- |
 | Ice Breath | Synchronized breaths from pure RGB white to saturated blue and back at a constant 100% brightness, using one-degree phase steps and 150 ms pacing. |
 | Molten Glass | Amber, rose-orange and gold drift with slow irregular brightness swells. |
-| Aurora | Teal through blue-violet with slow waves; paired bulbs may have a small tint spread. |
+| Aurora | Teal through blue-violet with slow waves; paired bulbs use adjustable color separation. |
 | Clouds over Sunlight | Warm white with broad, soft dimming and clearing. |
 | Ember Bed | Deep orange with slow movement and occasional glowing blooms. |
 | Incandescent Shimmer | Warm white, small continuous brightness variation and occasional brief dips. |
@@ -124,7 +124,7 @@ Run **Custom Lighting Patterns**, choose a **Pattern** and **Bulbs**, and set **
 | Stairway Cascade | A warm-white wave along ordered fixtures, retaining at least 30% commanded brightness. |
 | Backyard Echo | A shared color rotation delayed between fixtures; configured tail lights follow last. |
 
-Configure `linked_pairs` in the custom script as lists of bulb entity IDs sharing a fixture. Both selected members share a spatial position and commanded brightness. **Aurora dome tint spread** defaults to eight hue degrees across a pair; set it to zero for matching colors. Pairing never adds an unselected bulb. For a spatial pattern, **Fixture order** accepts one representative bulb per fixture in travel order; otherwise the Bulbs selection order is used. The control does not discover physical location. `echo_tail_lights` can name a string light to place last for Backyard Echo. The generic repository includes no household mappings.
+Configure `linked_pairs` in the custom script as lists of bulb entity IDs sharing a fixture. Both selected members share a spatial position and commanded brightness. **Aurora dome tint spread** defaults to 60 hue degrees across a pair (adjustable from 0–90); set it to zero for matching colors. Pairing never adds an unselected bulb. For a spatial pattern, **Fixture order** accepts one representative bulb per fixture in travel order; otherwise the Bulbs selection order is used. The control does not discover physical location. `echo_tail_lights` can name a string light to place last for Backyard Echo. The generic repository includes no household mappings.
 
 Frames use elapsed time, several waves with different periods, a randomized starting phase and dip period, and smooth analytic envelopes. Custom frames dispatch per bulb (to respect individual color-temperature limits) then pause at least 250 ms; actual timing includes service latency. Large selections can look slower or less synchronized and generate more cloud requests. These scripts use no sound or motion sensors. A string light is controlled as one whole light; no per-segment effects are implied.
 
