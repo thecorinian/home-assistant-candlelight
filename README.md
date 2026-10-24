@@ -1,6 +1,6 @@
 # Home Assistant Candlelight
 
-Warm-white candlelight with an **80% baseline**, quiet irregular motion, deeper gust-driven dips, and occasional rebounds to 100%. The brightness floor is 25%. Color temperature stays at 2000 K, clamped to each bulb's supported range. There is no hue cycling. Lights that support dimming but not color temperature keep their existing color.
+Warm-white candlelight with **held 80%, 70%, and 50% baselines**, quiet irregular motion, deeper gust-driven dips, and occasional rebounds to 100%. The brightness floor is 25%. Color temperature stays at 2000 K, clamped to each bulb's supported range. There is no hue cycling. Lights that support dimming but not color temperature keep their existing color.
 
 The effect is inspired by a damped flame response; it is not a combustion or fluid simulation. Four overlapping waves provide small fluctuations. Randomly spaced gusts use a smoothed onset and decaying oscillation. Each bulb has a distinct phase and response delay. The event schedule extends without resetting the flame's clock.
 
@@ -29,7 +29,9 @@ At the top of the main script, `excluded_lights` can list broken or unwanted lig
 
 Commands are serialized with a short randomized pause. This avoids an uncontrolled burst of parallel requests, but larger groups update more slowly. Smart-bulb/cloud latency also limits smoothness; this is not a high-frequency hardware candle effect. Changing brightness or color manually while the effect runs may be overwritten; stop the effect first.
 
-The 80% value is the baseline, not the average. Frequent downward gusts lower the time-average brightness. The requested 25–100% range is a bound, not a promise that every cycle will reach both ends.
+The effect starts at 70%. It then chooses each next baseline from `[80, 80, 70, 50]`: approximately 50% of target selections at 80%, 25% at 70%, and 25% at 50%. Each change uses a smoothstep ease over a random 15–30 seconds, then holds for a randomly selected 30–180 seconds. Both the fade duration and hold duration vary independently of the chosen level. Hold duration is independent of the selected brightness, so the time shares approach the same weights over longer runs, with finite-run variation and time spent between levels during blends. Consecutive choices may repeat. The same underlying baseline applies to the group; each bulb retains its individual flicker and gust response.
+
+These values are baselines, not a flat output or the average. Their weighted nominal average is 70%; downward gusts lower the actual time-average brightness further. The requested 25–100% range is a bound, not a promise that every cycle will reach both ends.
 
 ## Validation
 
@@ -38,4 +40,4 @@ python3 -m pip install -r requirements-dev.txt
 python3 -m unittest discover -s tests -v
 ```
 
-Tests render the shipped Jinja selection and model templates to check off/unavailable exclusions, event continuity and pruning, brightness bounds, and different bulb responses. They do not emulate Home Assistant's scheduler or Tuya's physical response. Installation and live integration tests are recorded separately from these deterministic checks.
+Tests render the shipped Jinja selection and model templates to check off/unavailable exclusions, event continuity and pruning, brightness bounds, different bulb responses, baseline transition continuity, and weighted dwell distribution. They do not emulate Home Assistant's scheduler or Tuya's physical response. Installation and live integration tests are recorded separately from these deterministic checks.

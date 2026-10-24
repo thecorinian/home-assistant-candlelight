@@ -1,6 +1,6 @@
 alias: Natural Candlelight
-description: Warm-white candlelight with an 80% baseline and natural gusts. Choose bulbs, or leave empty for all. Stop leaves
-  lights steady at 80%.
+description: "Warm-white candlelight with 80/70/50% baselines weighted 50/25/25. Random 30-second to 3-minute holds, joined\
+  \ by gentle 15\u201330-second blends. Starts at 70%; Stop settles at 80%."
 icon: mdi:candle
 mode: single
 fields:
@@ -108,11 +108,16 @@ sequence:
         target:
           entity_id: '{{ repeat.item }}'
         data:
-          brightness_pct: 80
+          brightness_pct: 70
 - variables:
     started: '{{ as_timestamp(now()) }}'
     gust_events: []
     prepared_bulbs: '{{ bulbs }}'
+    baseline_from: 70
+    baseline_target: 70
+    baseline_changed: 0
+    baseline_next: '{{ range(30, 181) | random }}'
+    baseline_blend_seconds: 20
 - repeat:
     while:
     - condition: template
@@ -137,6 +142,16 @@ sequence:
         prepared_bulbs: '{{ prepared_bulbs | select(''in'', bulbs) | select(''is_state'', ''on'') | list }}'
     - variables:
         elapsed: '{{ as_timestamp(now()) - (started | float) }}'
+    - if:
+      - condition: template
+        value_template: '{{ (elapsed | float) >= (baseline_next | float) }}'
+      then:
+      - variables:
+          baseline_from: '{{ baseline_target }}'
+          baseline_target: '{{ [80, 80, 70, 50] | random }}'
+          baseline_changed: '{{ elapsed }}'
+          baseline_blend_seconds: '{{ range(15, 31) | random }}'
+          baseline_next: '{{ (elapsed | float) + (baseline_blend_seconds | float) + (range(30, 181) | random) }}'
     - if:
       - condition: template
         value_template: '{{ gust_events | count == 0 or (elapsed | float) > (gust_events[-1][0] | float) - 30 }}'
@@ -188,6 +203,12 @@ sequence:
             - variables:
                 prepared_bulbs: '{{ prepared_bulbs + [repeat.item] }}'
           - variables:
+              baseline: |-
+                {% set age = as_timestamp(now()) - (started | float) - (baseline_changed | float) %}
+                {% set u = [0.0, [1.0, age / (baseline_blend_seconds | float)] | min] | max %}
+                {% set blend = u*u*(3 - 2*u) %}
+                {{ (baseline_from | float) + ((baseline_target | float) - (baseline_from | float))*blend }}
+          - variables:
               level: |-
                 {% set t = as_timestamp(now()) - (started | float) %} {% set all_ids = states.light | map(attribute='entity_id') | sort | list %}
                 {% set i = all_ids.index(repeat.item) %} {% set p = (seed | float) + i * 2.39996 %} {% set envelope = 0.35 + 0.65 * (sin(0.17*t + (seed | float)) ** 2) %} {% set turbulence = envelope * (1.8*sin(0.61*t+p) + 1.2*sin(1.13*t+1.9*p) + 0.8*sin(1.97*t+0.7*p) + 0.4*sin(2.3*t+2.4*p)) %} {% set response = namespace(value=0.0) %} {% for event in gust_events %}
@@ -198,7 +219,7 @@ sequence:
                     {% set smooth_onset = onset*onset*(3 - 2*onset) %}
                     {% set response.value = response.value - event[1] * coupling * smooth_onset * (2.718281828 ** (-0.85*tau)) * sin(2.5*tau) %}
                   {% endif %}
-                {% endfor %} {{ [25, [100, (80 + turbulence + response.value) | round | int] | min] | max }}
+                {% endfor %} {{ [25, [100, ((baseline | float) + turbulence + response.value) | round | int] | min] | max }}
           - action: light.turn_on
             continue_on_error: true
             target:
