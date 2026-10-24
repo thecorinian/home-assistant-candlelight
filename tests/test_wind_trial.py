@@ -6,8 +6,10 @@ import test_templates
 ROOT=test_templates.ROOT
 
 TRIAL=yaml.safe_load((ROOT/'experiments/candlelight_wind_trial.yaml').read_text())
-INIT=next(a['variables'] for a in TRIAL['sequence'] if 'wind_pulses' in a.get('variables',{}))
+INIT=next(a['variables'] for a in TRIAL['sequence'] if 'wind_next' in a.get('variables',{}))
 LOOP=next(a['repeat'] for a in TRIAL['sequence'] if 'repeat' in a and 'while' in a['repeat'])
+BURST=next(a['then'] for a in LOOP['sequence'] if 'burst_baseline' in a.get('then',[{}])[0].get('variables',{}))
+PULSE=BURST[2]['repeat']['sequence']
 INNER=next(a['repeat']['sequence'][0]['then'] for a in LOOP['sequence'] if 'repeat' in a)
 RAW=next(a['variables']['raw_level'] for a in INNER if 'raw_level' in a.get('variables',{}))
 SMOOTH=next(a['variables']['level'] for a in INNER if 'level' in a.get('variables',{}))
@@ -16,31 +18,50 @@ CACHE=next(a['variables']['last_levels'] for a in INNER if 'last_levels' in a.ge
 class Wind(unittest.TestCase):
  setUp=test_templates.Templates.setUp
  render=test_templates.Templates.render
- def test_wind_schedule_has_clusters_and_quiet_gaps(self):
-  pulses=self.render(INIT['wind_pulses'])
-  self.assertGreaterEqual(len(pulses),60)
-  self.assertLessEqual(len(pulses),100)
-  gaps=[b[0]-a[0]-a[1] for a,b in zip(pulses,pulses[1:])]
-  self.assertEqual(sum(gap>10 for gap in gaps),19)
-  self.assertTrue(all(.79<=gap<=31.81 for gap in gaps))
-  self.assertTrue(all(2.5<=p[1]<=4.5 and 20<=p[2]<=40 for p in pulses))
- def test_wind_dips_below_ordinary_model_and_stays_bounded(self):
+ def test_wind_schedule_leaves_long_variable_quiet_gaps(self):
+  rng=test_templates.random.Random(91)
+  self.env.filters['random']=test_templates.pass_context(lambda context,seq:rng.choice(list(seq)))
+  self.env.globals['now']=lambda:200
+  gaps=[]
+  for _ in range(1000):
+   opening=self.render(INIT['wind_next'])
+   self.assertTrue(8<=opening<=14)
+   gaps.append(self.render(BURST[3]['variables']['wind_next'],started=0)-200)
+  self.assertTrue(all(45<=gap<=150 for gap in gaps))
+  self.assertGreater(len(set(gaps)),90)
+  self.assertGreater(sum(gaps)/len(gaps),90)
+ def test_triplets_have_soft_edges_and_varied_bounded_depths(self):
+  rng=test_templates.random.Random(121)
+  self.env.filters['random']=test_templates.pass_context(lambda context,seq:rng.choice(list(seq)))
+  self.assertEqual(BURST[2]['repeat']['count'],3)
+  depths=[]
+  for baseline in [50,70,80]:
+   previous=baseline
+   for _ in range(100):
+    dip=self.render(PULSE[0]['variables']['dip_level'],burst_baseline=baseline)
+    recovery=self.render(PULSE[0]['variables']['recovery_level'],burst_baseline=baseline)
+    frames=self.render(PULSE[1]['repeat']['for_each'],burst_level=previous,dip_level=dip,recovery_level=recovery)
+    self.assertTrue(all(20<=level<=100 for level in frames))
+    self.assertTrue(previous>frames[0]>frames[1]<frames[2]<frames[3])
+    self.assertLessEqual(abs(frames[0]-previous),25)
+    depths.append(baseline-dip)
+    previous=recovery
+  self.assertGreater(len(set(depths)),15)
+ def test_calm_and_damped_tail_stay_bounded(self):
   ctx=dict(started=0,seed=.7,repeat=NS(item='light.a'),gust_events=[],baseline=70)
-  self.env.globals['now']=lambda:7
-  calm=self.render(RAW,wind_pulses=[],**ctx)
-  windy=self.render(RAW,wind_pulses=[[5,4,35]],**ctx)
-  self.assertEqual(calm-windy,35)
   for baseline in [50,70,80]:
    for t in [i*.1 for i in range(200)]:
     self.env.globals['now']=lambda:t
-    value=self.render(RAW,wind_pulses=[[5,4,40],[7,3,40]],**dict(ctx,baseline=baseline,gust_events=[[5,100,2.3,0]]))
+    calm=self.render(RAW,**dict(ctx,baseline=baseline))
+    self.assertLessEqual(abs(calm-baseline),5)
+    value=self.render(RAW,**dict(ctx,baseline=baseline,gust_events=[[5,50,2.3,0]]))
     self.assertGreaterEqual(value,20)
     self.assertLessEqual(value,100)
  def test_thermal_filter_moves_gradually_without_overshoot(self):
   levels={'light.a':80}
   last={'light.a':0}
   outputs=[]
-  for step in range(1,11):
+  for step in range(1,16):
    t=step*.2
    self.env.globals['now']=lambda:t
    level=self.render(SMOOTH,started=0,repeat=NS(item='light.a'),raw_level=30,last_levels=levels,last_times=last)
