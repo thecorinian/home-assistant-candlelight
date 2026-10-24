@@ -12,12 +12,8 @@ from jinja2 import pass_context
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = yaml.safe_load((ROOT / 'scripts/natural_candlelight.yaml').read_text())
 LOOP = next(a['repeat'] for a in SCRIPT['sequence'] if 'repeat' in a and 'while' in a['repeat'])
-INNER = next(a['repeat']['sequence'][0]['then'] for a in LOOP['sequence'] if 'repeat' in a)
-LEVEL = next(a['variables']['level'] for a in INNER if 'level' in a.get('variables', {}))
-BASELINE = next(a['variables']['baseline'] for a in INNER if 'baseline' in a.get('variables', {}))
-GUSTS = next(a['then'][0]['variables']['gust_events'] for a in LOOP['sequence'] if 'gust_events' in a.get('then', [{}])[0].get('variables', {}))
-BASELINE_CHANGE = next(a['then'][0]['variables'] for a in LOOP['sequence'] if 'baseline_target' in a.get('then', [{}])[0].get('variables', {}))
 FILTER = SCRIPT['sequence'][1]['variables']['bulbs']
+TRIAL = yaml.safe_load((ROOT / 'experiments/candlelight_wind_trial.yaml').read_text())
 
 def bulb(name,state='on',modes=('color_temp',)):
  return NS(entity_id='light.'+name, domain='light',state=state,attributes={'supported_color_modes':list(modes)})
@@ -26,6 +22,7 @@ class Templates(unittest.TestCase):
  def setUp(self):
   self.lights=[bulb('a'),bulb('b','off'),bulb('dead','unavailable'),bulb('switch',modes=['onoff'])]
   self.env=NativeEnvironment()
+  self.env.filters['bool']=lambda value: str(value).lower() in ('true','on','yes','1','enable')
   self.compiled={}
   self.env.globals.update(sin=math.sin,log=math.log,states=NS(light=self.lights),as_timestamp=lambda x:x,now=lambda:0,
    expand=lambda ids:[x for x in self.lights if x.entity_id in ids])
@@ -41,71 +38,77 @@ class Templates(unittest.TestCase):
  def test_manual_selection_and_dimming_filter(self):
   self.assertEqual(self.render(FILTER,requested=[],only_lit=False,excluded_lights=[]),['light.a','light.b'])
   self.assertEqual(self.render(FILTER,requested=['light.b'],only_lit=False,excluded_lights=[]),['light.b'])
- def test_extending_schedule_retains_active_tails_and_event_identity(self):
-  events=[[95,70,2,11],[105,80,2.7,12]]
-  result=self.render(GUSTS,elapsed=100,gust_events=events)
-  self.assertEqual(result[:2],events)
-  self.assertEqual(result[2][3],13)
-  self.assertTrue(all(b[0]-a[0]>4 for a,b in zip(result,result[1:])))
-  self.assertTrue(all(55<=e[1]<=100 and 1.7<=e[2]<=2.9 for e in result))
- def test_rolling_schedule_prunes_expired_events(self):
-  result=self.render(GUSTS,elapsed=500,gust_events=[[0,70,2,0],[495,70,2,1],[505,70,2,2]])
-  self.assertNotIn([0,70,2,0],result)
-  self.assertEqual(result[0][3],1)
- def test_brightness_bounds_and_distinct_flames(self):
-  events=[[t,100,2.3,i] for i,t in enumerate(range(5,300,9))]
-  values=[]
-  for t in [x*.2 for x in range(1500)]:
-   self.env.globals['now']=lambda:t
-   values.append(self.render(LEVEL,started=0,seed=.7,repeat=NS(item='light.a'),gust_events=events))
-  self.assertGreaterEqual(min(values),25)
-  self.assertLessEqual(max(values),100)
-  self.assertLess(min(values),45)
-  self.assertEqual(max(values),100)
-  self.assertGreater(sum(values)/len(values),60)
-  self.assertLess(sum(values)/len(values),85)
-  self.env.globals['now']=lambda:10
-  a=self.render(LEVEL,started=0,seed=.7,repeat=NS(item='light.a'),gust_events=events)
-  b=self.render(LEVEL,started=0,seed=.7,repeat=NS(item='light.b'),gust_events=events)
-  self.assertNotEqual(a,b)
-
- def test_baseline_blend_is_continuous_and_monotonic(self):
-  for old,new in [(80,50),(50,80),(70,50),(80,80)]:
-   values=[]
-   for t in [0,2.5,5,10,15,17.5,20,40,200]:
-    self.env.globals['now']=lambda:t
-    values.append(self.render(BASELINE,started=0,baseline_changed=0,baseline_from=old,baseline_target=new))
-   self.assertEqual(values[0],old)
-   self.assertEqual(values[3],(old+new)/2)
-   self.assertEqual(values[-3:],[new,new,new])
-   self.assertEqual(values,sorted(values,reverse=new<old))
- def test_weighted_dwell_time_matches_requested_shares(self):
-  rng=random.Random(7391)
-  self.env.filters['random']=pass_context(lambda context,seq:rng.choice(list(seq)))
-  totals={80:0,70:0,50:0}
-  for _ in range(10000):
-   target=self.render(BASELINE_CHANGE['baseline_target'])
-   fade=self.render(BASELINE_CHANGE['baseline_blend_seconds'])
-   self.assertGreaterEqual(fade,15)
-   self.assertLessEqual(fade,30)
-   dwell=self.render(BASELINE_CHANGE['baseline_next'],elapsed=0,baseline_blend_seconds=fade)-fade
-   self.assertGreaterEqual(dwell,30)
-   self.assertLessEqual(dwell,180)
-   totals[target]+=dwell
-  total=sum(totals.values())
-  for target,expected in [(80,.5),(70,.25),(50,.25)]:
-   self.assertAlmostEqual(totals[target]/total,expected,delta=.015)
- def test_low_baselines_preserve_flicker_and_bounds(self):
-  levels=[]
-  for baseline in [50,70,80]:
-   self.env.globals['now']=lambda:0
-   levels.append(self.render(LEVEL,started=0,seed=.7,repeat=NS(item='light.a'),gust_events=[],baseline=baseline))
-   for t in [5+x*.2 for x in range(100)]:
-    self.env.globals['now']=lambda:t
-    value=self.render(LEVEL,started=0,seed=.7,repeat=NS(item='light.a'),gust_events=[[5,100,2.3,0]],baseline=baseline)
-    self.assertGreaterEqual(value,25)
-    self.assertLessEqual(value,100)
-  self.assertEqual(levels[1]-levels[0],20)
-  self.assertEqual(levels[2]-levels[1],10)
+ def test_default_run_is_unlimited_and_preserves_off_bulbs(self):
+  init=SCRIPT['sequence'][0]['variables']
+  self.assertTrue(self.render(init['only_lit']))
+  self.assertFalse(self.render(init['only_lit'],only_on=False))
+  for supplied,expected in [(None,0),(0,0),(20,20),(-5,0),(300,240)]:
+   args={} if supplied is None else {'minutes':supplied}
+   self.assertEqual(self.render(init['run_minutes'],**args),expected)
+ def test_all_flame_dispatch_guards_allow_unlimited_and_stop_on_request(self):
+  def guards(value):
+   if isinstance(value,dict):
+    for k,v in value.items():
+     if k=='value_template' and isinstance(v,str) and 'input_boolean.natural_candlelight_active' in v:
+      yield v
+     else: yield from guards(v)
+   elif isinstance(value,list):
+    for v in value: yield from guards(v)
+  templates=list(guards(LOOP))
+  self.assertGreaterEqual(len(templates),5)
+  enabled=True
+  def is_state(entity,state):
+   if entity=='input_boolean.natural_candlelight_active': return enabled
+   return entity=='light.a' and state=='on'
+  self.env.globals['is_state']=is_state
+  self.env.tests['is_state']=is_state
+  args=dict(started=0,run_minutes=0,bulbs=['light.a'],cohort=['light.a'],repeat=NS(item='light.a'))
+  self.env.globals['now']=lambda:12*3600
+  for t in templates:
+   self.assertTrue(self.render(t,**args))
+   self.assertFalse(self.render(t,**dict(args,run_minutes=20)))
+  enabled=False
+  for t in templates: self.assertFalse(self.render(t,**args))
+ def test_approved_model_is_preserved_in_default_controller(self):
+  def model_vars(value):
+   result={}
+   if isinstance(value,dict):
+    for k,v in value.items():
+     if k=='variables':
+      for name,template in v.items():
+       if name in ['raw_level','level','baseline','dip_level','recovery_level','pulse_count','baseline_target','baseline_blend_seconds','wind_next']:
+        result.setdefault(name,[]).append(template)
+     result.update({name: result.get(name,[])+items for name,items in model_vars(v).items()})
+   elif isinstance(value,list):
+    for v in value:
+     for name,items in model_vars(v).items():result.setdefault(name,[]).extend(items)
+   return result
+  trial_loop=next(a['repeat'] for a in TRIAL['sequence'] if 'while' in a.get('repeat',{}))
+  self.assertEqual(model_vars(LOOP),model_vars(trial_loop))
+ def test_added_bulbs_are_included_in_the_next_grouping_pass(self):
+  ordering=LOOP['sequence'][0]['variables']['flame_order']
+  before=self.render(ordering)
+  self.lights.append(bulb('new'))
+  after=self.render(ordering)
+  self.assertNotIn('light.new',before)
+  self.assertIn('light.new',after)
+ def test_default_controller_has_no_trial_handover_or_self_start(self):
+  def actions(value):
+   if isinstance(value,dict):
+    if 'action' in value: yield value
+    for v in value.values(): yield from actions(v)
+   elif isinstance(value,list):
+    for v in value: yield from actions(v)
+  self.assertFalse(any(a['action'].startswith('script.') for a in actions(SCRIPT['sequence'])))
+  self.assertTrue(all(a.get('continue_on_error') is True for a in actions(SCRIPT['sequence']) if a['action']=='light.turn_on'))
+  self.assertNotIn('trial_script_entity',str(SCRIPT))
+  self.assertEqual(SCRIPT['sequence'][-1]['action'],'input_boolean.turn_off')
+ def test_optional_trial_blocks_the_nightly_restart(self):
+  automation=yaml.safe_load((ROOT/'automations/nightly_natural_candlelight.yaml').read_text())
+  guard=automation['actions'][0]['default'][1]['value_template']
+  self.env.globals['is_state']=lambda entity,state:True
+  self.assertFalse(self.render(guard))
+  self.env.globals['is_state']=lambda entity,state:False
+  self.assertTrue(self.render(guard))
 
 if __name__=='__main__': unittest.main()

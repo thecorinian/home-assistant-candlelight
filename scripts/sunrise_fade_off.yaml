@@ -1,0 +1,131 @@
+alias: Sunrise Fade Off
+description: 'At local sunrise, stop candlelight without a brightness jump and gradually fade currently-on eligible
+  lights to off. Default fade: 30 minutes.'
+icon: mdi:weather-sunset-up
+mode: single
+fields:
+  lights:
+    name: Bulbs
+    description: Leave empty for all eligible lights currently on.
+    default: []
+    selector:
+      entity:
+        filter:
+          domain: light
+        multiple: true
+  minutes:
+    name: Fade duration
+    description: Minutes from current brightness to off.
+    default: 30
+    selector:
+      number:
+        min: 1
+        max: 120
+        step: 1
+        unit_of_measurement: minutes
+        mode: box
+variables:
+  excluded_lights: []
+  resume_helpers: []
+  controllers:
+  - script.natural_candlelight
+  - script.candlelight_wind_trial
+sequence:
+- variables:
+    running_controllers: '{{ controllers | select(''is_state'', ''on'') | list }}'
+- if:
+  - condition: template
+    value_template: '{{ running_controllers | count > 0 }}'
+  then:
+  - action: script.turn_off
+    target:
+      entity_id: '{{ running_controllers }}'
+- action: input_boolean.turn_off
+  target:
+    entity_id: input_boolean.natural_candlelight_active
+- if:
+  - condition: template
+    value_template: '{{ resume_helpers | count > 0 }}'
+  then:
+  - action: input_boolean.turn_off
+    target:
+      entity_id: '{{ resume_helpers }}'
+- variables:
+    requested: '{{ lights | default([], true) }}'
+    fade_seconds: '{{ [1, [120, minutes | default(30) | float(30)] | min] | max * 60 }}'
+- variables:
+    bulbs: '{% set ns=namespace(ids=[]) %}
+
+      {% set source=expand(requested) if requested | count > 0 else states.light %}
+
+      {% for s in source %}
+
+      {% set modes=s.attributes.get(''supported_color_modes'', []) or [] %}
+
+      {% if s.state == ''on'' and s.entity_id not in excluded_lights and modes | reject(''in'', [''onoff'',''unknown''])
+      | list | count > 0 %}
+
+      {% set ns.ids=ns.ids+[s.entity_id] %}
+
+      {% endif %}{% endfor %}{{ ns.ids | unique | sort | list }}'
+- variables:
+    initial_levels: '{% set ns=namespace(items=[]) %}{% for id in bulbs %}{% set ns.items=ns.items+[(id, state_attr(id,''brightness'')
+      | int(255))] %}{% endfor %}{{ dict(ns.items) }}'
+    started: '{{ as_timestamp(now()) }}'
+- repeat:
+    while:
+    - condition: template
+      value_template: '{{ as_timestamp(now()) - (started | float) < (fade_seconds | float) and expand(bulbs) | selectattr(''state'',''eq'',''on'')
+        | list | count > 0 }}'
+    sequence:
+    - repeat:
+        for_each: '{{ bulbs }}'
+        sequence:
+        - if:
+          - condition: template
+            value_template: '{{ is_state(repeat.item, ''on'') }}'
+          then:
+          - variables:
+              level: '{% set u=[0.0, [1.0, (as_timestamp(now()) - (started | float)) / (fade_seconds | float)] |
+                min] | max %}
+
+                {% set remaining=1 - u*u*(3-2*u) %}
+
+                {{ [1, [(initial_levels[repeat.item] | float) * remaining, state_attr(repeat.item, ''brightness'')
+                | float(255)] | min | round(0, ''floor'') | int] | max }}'
+          - if:
+            - condition: template
+              value_template: '{{ is_state(repeat.item,''on'') and (state_attr(repeat.item,''brightness'') | int(255))
+                > (level | int) }}'
+            then:
+            - action: light.turn_on
+              continue_on_error: true
+              target:
+                entity_id: '{{ repeat.item }}'
+              data:
+                brightness: '{{ level | int }}'
+    - delay:
+        seconds: '{{ [0.1, [15, (fade_seconds | float) - (as_timestamp(now()) - (started | float))] | min] | max
+          }}'
+- repeat:
+    count: 3
+    sequence:
+    - variables:
+        remaining_lights: '{{ bulbs | select(''is_state'',''on'') | list }}'
+    - if:
+      - condition: template
+        value_template: '{{ remaining_lights | count > 0 }}'
+      then:
+      - action: light.turn_off
+        continue_on_error: true
+        target:
+          entity_id: '{{ remaining_lights }}'
+      - delay:
+          seconds: 5
+- if:
+  - condition: template
+    value_template: '{{ resume_helpers | count > 0 }}'
+  then:
+  - action: input_boolean.turn_on
+    target:
+      entity_id: '{{ resume_helpers }}'

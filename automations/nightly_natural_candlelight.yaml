@@ -1,6 +1,6 @@
 alias: Nightly Natural Candlelight
-description: From 9 PM until sunrise, apply candlelight to lights that are on. New lights join; off lights stay off. Disable
-  this automation to prevent nightly starts.
+description: From 9 PM until local sunrise, run approved candlelight on lights already on, with automatic recovery
+  every minute. At sunrise, fade eligible lit bulbs to off over 30 minutes.
 mode: queued
 max: 10
 max_exceeded: silent
@@ -17,6 +17,9 @@ triggers:
 - trigger: event
   event_type: state_changed
   id: light_on
+- trigger: time_pattern
+  minutes: /1
+  id: check
 conditions:
 - condition: template
   value_template: '{{ reason != ''light_on'' or (trigger.event.data.entity_id.startswith(''light.'') and trigger.event.data.new_state
@@ -26,7 +29,13 @@ actions:
 - choose:
   - conditions: '{{ reason == ''sunrise'' }}'
     sequence:
-    - action: script.stop_natural_candlelight
+    - action: script.turn_on
+      target:
+        entity_id: script.sunrise_fade_off
+      data:
+        variables:
+          lights: []
+          minutes: 30
   default:
   - condition: or
     conditions:
@@ -34,6 +43,10 @@ actions:
       after: '21:00:00'
     - condition: sun
       before: sunrise
+  - condition: template
+    value_template: '{{ not is_state(''script.candlelight_wind_trial'', ''on'') }}'
+  - condition: template
+    value_template: '{{ not is_state(''script.sunrise_fade_off'', ''on'') }}'
   - if:
     - condition: template
       value_template: '{{ reason in [''evening'', ''startup''] }}'
