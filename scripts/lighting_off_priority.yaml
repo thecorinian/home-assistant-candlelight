@@ -1,6 +1,6 @@
 alias: Lighting Off Priority
-description: Record a persistent manual-off hold before resuming any effects. Stop indoor effects, reinforce
-  the requested off for three seconds, and resume candlelight only on unheld lit bulbs.
+description: Record a persistent manual-off hold before resuming any effects. Stop indoor effects, reinforce the
+  requested off for three seconds, and resume candlelight only on unheld lit bulbs.
 icon: mdi:lightbulb-off-outline
 mode: parallel
 max: 40
@@ -64,8 +64,8 @@ sequence:
         milliseconds: 750
 - if:
   - condition: template
-    value_template: '{{ candle_was_on and is_state(''automation.nightly_natural_candlelight'',''on'') and not
-      is_state(''script.sunrise_fade_off'',''on'') and (now().hour>=21 or (now().hour<12 and is_state(''sun.sun'',''below_horizon'')))
+    value_template: '{{ candle_was_on and (is_state(''automation.nightly_natural_candlelight'',''on'') or is_state(''input_boolean.daily_lighting_schedule_active'',''on''))
+      and not is_state(''script.sunrise_fade_off'',''on'') and (now().hour>=21 or (now().hour<12 and is_state(''sun.sun'',''below_horizon'')))
       }}'
   then:
   - action: script.turn_on
@@ -77,3 +77,5 @@ sequence:
         only_on: true
         minutes: 0
         preserve_brightness: true
+        scheduled_mode: '{{ is_state(''input_boolean.daily_lighting_schedule_active'',''on'') }}'
+        automatic_fade: '{{ not is_state(''input_boolean.daily_lighting_schedule_active'',''on'') }}'

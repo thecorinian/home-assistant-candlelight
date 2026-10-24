@@ -1,0 +1,69 @@
+alias: Daily Lighting Schedule
+description: Keep the daily controller running while enabled. Reset manual overrides at 04:00 local time and refresh
+  daily solar anchors. Replaces the old nightly/sunrise policy.
+mode: queued
+max: 5
+triggers:
+- trigger: homeassistant
+  event: start
+  id: startup
+- trigger: time
+  at: 04:00:00
+  id: reset
+- trigger: time_pattern
+  minutes: /1
+  id: check
+- trigger: sun
+  event: sunrise
+  id: sunrise
+- trigger: sun
+  event: sunset
+  id: sunset
+- trigger: state
+  entity_id: input_boolean.daily_lighting_schedule_active
+  to: 'on'
+  id: enable
+conditions:
+- condition: state
+  entity_id: input_boolean.daily_lighting_schedule_active
+  state: 'on'
+variables:
+  reason: '{{ trigger.id if trigger is defined else ''manual'' }}'
+  reset_day: '{{ (now()-timedelta(hours=4)).date()|string }}'
+  clock: '{{ states(''input_text.lighting_schedule_clock'')|from_json({}) }}'
+actions:
+- if:
+  - condition: template
+    value_template: '{{ clock.get(''reset_day'',reset_day)!=reset_day }}'
+  then:
+  - action: script.lighting_manual_off_registry
+    data:
+      operation: clear_all
+      lights: []
+- action: input_text.set_value
+  target:
+    entity_id: input_text.lighting_schedule_clock
+  data:
+    value: '{% set old=states(''input_text.lighting_schedule_clock'')|from_json({}) %}
+
+      {% set d=now().date()|string %}{% set r=as_local(as_datetime(state_attr(''sun.sun'',''next_rising''))) %}{%
+      set s=as_local(as_datetime(state_attr(''sun.sun'',''next_setting''))) %}
+
+      {% set r=r.replace(year=now().year,month=now().month,day=now().day) %}{% set s=s.replace(year=now().year,month=now().month,day=now().day)
+      %}
+
+      {% set rise=old.get(''rise'',as_timestamp(r)) if old.get(''date'')==d else as_timestamp(r) %}
+
+      {% set setting=old.get(''set'',as_timestamp(s)) if old.get(''date'')==d else as_timestamp(s) %}
+
+      {% if reason==''sunrise'' %}{% set rise=as_timestamp(now()) %}{% endif %}{% if reason==''sunset'' %}{% set
+      setting=as_timestamp(now()) %}{% endif %}
+
+      {{ dict(date=d,rise=rise|int,set=setting|int,reset_day=reset_day)|to_json }}'
+- if:
+  - condition: template
+    value_template: '{{ not is_state(''script.daily_lighting_controller'',''on'') }}'
+  then:
+  - action: script.turn_on
+    target:
+      entity_id: script.daily_lighting_controller

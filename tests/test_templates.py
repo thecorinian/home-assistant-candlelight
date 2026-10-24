@@ -28,6 +28,7 @@ class Templates(unittest.TestCase):
   self.lights=[bulb('a'),bulb('b','off'),bulb('dead','unavailable'),bulb('switch',modes=['onoff'])]
   self.env=NativeEnvironment()
   self.env.filters['to_json']=json.dumps
+  self.env.filters['from_json']=lambda value,default={}: json.loads(value) if value not in ['', 'unknown', 'unavailable'] else default
   self.env.filters['sha256']=lambda value:hashlib.sha256(value.encode()).hexdigest()
   self.env.filters['bool']=lambda value: str(value).lower() in ('true','on','yes','1','enable')
   self.compiled={}

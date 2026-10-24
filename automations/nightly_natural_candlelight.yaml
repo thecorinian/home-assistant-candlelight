@@ -1,7 +1,7 @@
 alias: Nightly Natural Candlelight
 description: From 9 PM to sunrise, eligible bulbs switched on fade 1% to 80% over 10 seconds, then join Natural
-  Candlelight. Optional rooms join only during alternating present weeks. At sunrise, lit eligible bulbs fade
-  off over 30 minutes.
+  Candlelight. Optional rooms join only during alternating present weeks. At sunrise, lit eligible bulbs fade off
+  over 30 minutes.
 mode: queued
 max: 10
 max_exceeded: silent
@@ -24,17 +24,18 @@ triggers:
 conditions:
 - condition: template
   value_template: '{{ reason != ''light_on'' or (trigger.event.data.entity_id.startswith(''light.'') and trigger.event.data.new_state
-    is not none and trigger.event.data.new_state.state == ''on'' and (trigger.event.data.old_state is none
-    or trigger.event.data.old_state.state != ''on'')) }}'
+    is not none and trigger.event.data.new_state.state == ''on'' and (trigger.event.data.old_state is none or trigger.event.data.old_state.state
+    != ''on'')) }}'
 - condition: template
-  value_template: '{% set held=states(''input_text.lighting_manual_off'') %}{% set hold_valid=held not in [''*'',''unknown'',''unavailable'']
-    and held|length % 8 == 0 %}{% set present=true %}{% if alternating_week_lights|default([])|count>0 %}{%
-    set anchor=strptime(alternating_week_start|default(''2026-01-02 16:00:00''),''%Y-%m-%d %H:%M:%S'') %}{%
-    set present=((now().replace(tzinfo=None)-anchor).days // 7) % 2 == 0 %}{% endif %}
+  value_template: '{% set held=states(''input_text.lighting_manual_off'') %}{% set held=held[2:] if held.startswith(''h:'')
+    else held %}{% set hold_valid=held not in [''*'',''unknown'',''unavailable''] and held|length % 8 == 0 %}{%
+    set present=true %}{% if alternating_week_lights|default([])|count>0 %}{% set anchor=strptime(alternating_week_start|default(''2026-01-02
+    16:00:00''),''%Y-%m-%d %H:%M:%S'') %}{% set present=((now().replace(tzinfo=None)-anchor).days // 7) % 2 == 0
+    %}{% endif %}
 
     {% if reason != ''light_on'' %}{{ true }}{% else %}{% set s=trigger.event.data.new_state %}{% set modes=s.attributes.get(''supported_color_modes'',[])
-    or [] %}{{ s.entity_id not in excluded_lights and hold_valid and (s.entity_id|sha256)[:8] not in held and
-    (s.entity_id not in (alternating_week_lights|default([])) or present) and modes|reject(''in'',[''onoff'',''unknown''])|list|count>0
+    or [] %}{{ s.entity_id not in excluded_lights and hold_valid and (s.entity_id|sha256)[:8] not in held and (s.entity_id
+    not in (alternating_week_lights|default([])) or present) and modes|reject(''in'',[''onoff'',''unknown''])|list|count>0
     }}{% endif %}'
 actions:
 - choose:

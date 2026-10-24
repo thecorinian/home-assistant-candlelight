@@ -1,6 +1,6 @@
 # Home Assistant Candlelight
 
-Warm-white candlelight with continuous flutter, occasional single dips and loose triplets, and brief bright rebounds after long low holds. The approved wind model is now the **default controller**, including the nightly schedule. It starts at 50%, varies around held 50%, 70%, and 80% baselines, and bounds output to 20–100%. Color temperature stays at 2000 K, clamped to each bulb's supported range. Dimmable lights without color-temperature support keep their existing color.
+Warm-white candlelight with continuous flutter, occasional single dips and loose triplets, and brief bright rebounds after long low holds. The approved wind model is the default flame effect. The recommended [daily solar and weather schedule](docs/daily-schedule.md) adds sunrise wake-up, daytime tapering, evening candlelight, a 10 PM indoor cutoff, and daily manual overrides. It starts at 50%, varies around held 50%, 70%, and 80% baselines, and bounds output to 20–100%. Standalone color temperature stays at 2000 K, clamped to each bulb's supported range. Scheduled mode follows the bounded temperature curve and brightness ceiling. Dimmable lights without color-temperature support keep their existing color.
 
 The effect combines overlapping waves, randomized gusts, eased transitions, and a damped response. It approximates a flame's appearance; it is not a combustion or fluid simulation. The main controller runs continuously when Minutes is zero. The optional experiment remains available for timed comparisons but is no longer needed to get the approved effect.
 
@@ -13,7 +13,7 @@ The effect combines overlapping waves, randomized gusts, eased transitions, and 
 5. Create a third script using `scripts/sunrise_fade_off.yaml`. Confirm `script.sunrise_fade_off`.
 6. Install `scripts/lighting_manual_off_registry.yaml` as `script.lighting_manual_off_registry` and `scripts/resume_automatic_lighting.yaml` as `script.resume_automatic_lighting`.
 7. Create a script from `scripts/lighting_off_priority.yaml` as **Lighting Off Priority** (`script.lighting_off_priority`), then create and enable an automation from `automations/lighting_off_wins.yaml` as **Lighting Off Wins** (`automation.lighting_off_wins`).
-8. Create an automation using **Edit in YAML** and `automations/nightly_natural_candlelight.yaml`. Save it as **Nightly Natural Candlelight** (`automation.nightly_natural_candlelight`) and leave it enabled.
+8. For the **legacy overnight-only schedule**, create an automation using **Edit in YAML** and `automations/nightly_natural_candlelight.yaml`. Save it as **Nightly Natural Candlelight** (`automation.nightly_natural_candlelight`) and leave it enabled.
 
 The nightly automation runs from **9:00 PM in Home Assistant's configured local time until local sunrise**, using Home Assistant's Sun integration. It handles startup during the window, a light switching on, and a once-per-minute check that restarts an idle controller. Newly switched-on eligible bulbs rise from 1% to 80% over 10 seconds before joining candlelight. Existing lit bulbs retain their brightness during recovery. It does not interrupt an active timed wind trial, synchronized color cycle, or sunrise fade. It leaves off lights off and includes newly discovered eligible lights. Unavailable lights and on/off-only lights are skipped.
 
@@ -21,11 +21,13 @@ At **local sunrise**, candlelight stops at its current brightness and all eligib
 
 To activate it immediately during that window, stop any manually selected group, wait for Natural Candlelight to become idle, then choose **Run actions** on the nightly automation.
 
+For the full daily routine, follow [Daily solar and weather schedule](docs/daily-schedule.md) after steps 1–7 and leave the legacy nightly automation disabled. Do not enable both scheduling policies.
+
 ## Controls
 
 Run **Natural Candlelight** from its script menu. Choose any bulbs, or leave the selection empty for all available dimmable lights. **Only lights already on** is enabled by default to preserve off bulbs. An optional duration in minutes stops automatically; zero runs until stopped. Only one group runs at a time. Stop it before changing the selection.
 
-Run **Stop Natural Candlelight** to settle the currently lit bulbs at 80%. To keep the effect disabled for the night, also disable **Nightly Natural Candlelight**; otherwise the next minute check or a light turning on can start it again. Turning an individual bulb off removes it from the effect.
+Run **Stop Natural Candlelight** to settle the currently lit bulbs at 80%. To keep the effect disabled for the night, turn off **Daily Lighting Schedule Active** if installed, and disable **Nightly Natural Candlelight**; otherwise the next minute check or a light turning on can start it again. Turning an individual bulb off removes it from the effect.
 
 The Active helper is a stop/status control: turning it off stops the running effect. Turning it on alone does not launch the script. Use the scripts to start and stop.
 
@@ -39,7 +41,7 @@ The model starts at 50%. Low baselines hold for 45–150 seconds, 70% holds last
 
 Random gust episodes mix single deep dips and loose three-pulse flutters, spaced 40–100 seconds after the previous episode. Each pulse uses six brightness frames to soften the fall and recovery. Four overlapping background waves, slow wandering, and a 1-second first-order filter keep the effect moving between gusts. Three staggered groups share background brightness within each group.
 
-Each background group waits at least 500 ms or 100 ms per member after dispatch. With 24 bulbs the programmed pauses budget about ten background bulb updates per second before service overhead. Group dispatch and the faster gust/rebound bursts still create traffic; this is not a network-wide rate limiter or a Tuya quota guarantee. No router bandwidth or airtime measurements have been made. The official [HA Tuya integration](https://www.home-assistant.io/integrations/tuya/) is cloud based, so responsiveness depends on the integration and bulbs. Changing brightness or color manually while the effect runs may be overwritten; stop it first.
+Each background group waits at least 500 ms or 100 ms per member after dispatch. With 24 bulbs the programmed pauses budget about ten background bulb updates per second before service overhead. Group dispatch and the faster gust/rebound bursts still create traffic; this is not a network-wide rate limiter or a Tuya quota guarantee. No router bandwidth or airtime measurements have been made. The official [HA Tuya integration](https://www.home-assistant.io/integrations/tuya/) is cloud based, so responsiveness depends on the integration and bulbs. With the daily schedule enabled, direct Home Assistant changes create a hold. In standalone/legacy mode, stop the effect before changing brightness or color.
 
 ## Validation
 
@@ -146,11 +148,11 @@ After reaching 80%, the script automatically hands off to the default Natural Ca
 
 Install the registry, helper, off-priority script, resume script, and off-wins automation listed above. Update the candlelight, nightly, sunrise, and color controllers together. An off request records a persistent hold **before** candlelight restarts. Held bulbs are excluded from automatic candlelight and sunrise commands even if their cloud state incorrectly says on. The guard cancels indoor effect updates and reinforces the requested off command for three seconds; other lit, unheld bulbs can resume.
 
-The hold releases on a direct Home Assistant turn-on request, or an external off-to-on state transition after at least 30 seconds confirmed off. Immediate stale on feedback cannot clear it. If the integration never delivers an off state, use **Resume Automatic Lighting** for selected bulbs (empty selection clears all holds), then turn the lights on. This control clears holds without itself powering lights on. Holds are not automatically cleared nightly in this version.
+The hold releases on a direct Home Assistant turn-on request, or an external off-to-on state transition after at least 30 seconds confirmed off. Immediate stale on feedback cannot clear it. If the integration never delivers an off state, use **Resume Automatic Lighting** for selected bulbs (empty selection clears all holds), then turn the lights on. This control clears holds without itself powering lights on. In legacy mode, holds are not automatically cleared nightly. In daily mode, manual on/brightness/color also creates a hold and the 4 AM reset clears it.
 
 Optional `coupled_fixtures` lists in both Off Priority and Off Wins can link two bulbs sharing one dome: observing off on either pauses automatic effects on both. Only the specifically requested targets receive off commands. This can help when one bulb reports state unreliably. Leave empty for independent bulbs.
 
-The saved registry uses eight-character SHA256 prefixes, up to 31 simultaneous held bulbs. Updates are serialized. Capacity overflow, malformed state, or a detected prefix collision blocks all automatic lighting; clear all holds explicitly to recover. This is a state-management encoding, not a security feature.
+The saved registry uses an `h:` header followed by eight-character SHA256 prefixes, up to 31 simultaneous held bulbs. Updates are serialized. Capacity overflow, malformed state, or a detected prefix collision blocks all automatic lighting; clear all holds explicitly to recover. This is a state-management encoding, not a security feature.
 Newly switched-on bulbs are detected within the running candlelight controller, with a short debounce to gather bulbs in the same fixture. The ten-second fade temporarily pauses flicker updates elsewhere, then the normal model continues. A new on-state timestamp distinguishes another off/on cycle from ordinary brightness feedback. Recovery does not re-fade all lights that were already on. A bulb switched off during a fade is excluded from subsequent frames.
 
 Google/Tuya cloud state and commands can arrive asynchronously. Home Assistant can only record a hold once it receives an off action or off state (including a configured fixture partner). It cannot detect a voice command that never reaches any observed entity. A wall-powered bulb can briefly restore its firmware's previous level before the automatic fade starts.

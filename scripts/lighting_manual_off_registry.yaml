@@ -1,6 +1,6 @@
 alias: Lighting Manual Off Registry
-description: Serialize persistent manual-off holds. Compact 8-character SHA256 tokens support 31 held bulbs.
-  Overflow or a token collision holds all automatic lighting until explicitly cleared.
+description: Serialize persistent manual-off holds. Compact 8-character SHA256 tokens support 31 held bulbs. Overflow
+  or a token collision holds all automatic lighting until explicitly cleared.
 mode: queued
 max: 50
 max_exceeded: silent
@@ -25,10 +25,12 @@ sequence:
 - variables:
     ids: '{{ expand(lights|default([]))|selectattr(''domain'',''eq'',''light'')|map(attribute=''entity_id'')|list
       }}'
-    stored: '{{ states(''input_text.lighting_manual_off'')|to_json }}'
+    stored: '{{ {''value'':states(''input_text.lighting_manual_off'')} }}'
     op: '{{ operation|default(''hold'') }}'
 - variables:
-    updated: '{% set ns=namespace(old=[],tokens=[],alltokens=[]) %}
+    updated: '{% set raw=stored.value %}{% set stored=raw[2:] if raw.startswith(''h:'') else raw %}
+
+      {% set ns=namespace(old=[],tokens=[],alltokens=[]) %}
 
       {% for i in range(0,stored|length,8) %}{% set ns.old=ns.old+[stored[i:i+8]] %}{% endfor %}
 
@@ -38,17 +40,16 @@ sequence:
 
       {% set collision=ns.alltokens|count != ns.alltokens|unique|list|count %}
 
-      {% if op==''clear_all'' %}{{ ''''|to_json }}
+      {% if op==''clear_all'' %}h:
 
-      {% elif stored in [''*'',''unknown'',''unavailable''] or stored|length % 8 != 0 or collision %}{{ ''*''|to_json
-      }}
+      {% elif stored in [''*'',''unknown'',''unavailable''] or stored|length % 8 != 0 or collision %}*
 
       {% else %}{% set result=(ns.old+ns.tokens)|unique|sort|list if op==''hold'' else ns.old|reject(''in'',ns.tokens)|list
       %}
 
-      {{ (result|join('''') if result|count<=31 else ''*'')|to_json }}{% endif %}'
+      {{ ''h:''+(result|join('''')) if result|count<=31 else ''*'' }}{% endif %}'
 - action: input_text.set_value
   target:
     entity_id: input_text.lighting_manual_off
   data:
-    value: '{{ updated|to_json }}'
+    value: '{{ updated|trim }}'

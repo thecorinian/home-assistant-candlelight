@@ -24,23 +24,40 @@ class OffPriority(unittest.TestCase):
   for service,parent,expected in [('turn_off',None,'hold'),('turn_on',None,'release'),('turn_off','effect','ignore'),('turn_on','effect','ignore')]:
    t=NS(id='service_change',event=NS(context=NS(parent_id=parent),data=NS(domain='light',service=service)))
    self.assertEqual(self.env.from_string(AUTO['variables']['operation']).render(trigger=t).strip(),expected)
+ def test_daily_direct_on_and_color_commands_create_manual_hold(self):
+  self.env.globals['is_state']=lambda e,s:e=='input_boolean.daily_lighting_schedule_active'
+  for svc,expected in [('turn_on','manual_on'),('turn_off','hold')]:
+   t=NS(id='service_change',event=NS(context=NS(parent_id=None),data=NS(domain='light',service=svc)))
+   self.assertEqual(self.env.from_string(AUTO['variables']['operation']).render(trigger=t).strip(),expected)
+ def test_daily_expected_power_acknowledgments_are_not_manual_overrides(self):
+  self.env.globals['is_state']=lambda e,s:e=='input_boolean.daily_lighting_schedule_active'
+  token=hashlib.sha256(b'light.a').hexdigest()[:8]
+  class Markers:
+   def __call__(self,e):return token
+   def __getitem__(self,e):return NS(last_changed=0)
+  self.env.globals['states']=Markers()
+  self.env.globals['now']=lambda:10
+  self.assertEqual(self.operation('on','off'),'ignore')
+  self.assertEqual(self.operation('off','on',2),'ignore')
+  self.env.globals['now']=lambda:31
+  self.assertEqual(self.operation('on','off'),'hold')
+  self.assertEqual(self.operation('off','on',2),'manual_on')
  def update(self,stored,ids,op='hold'):
-  return self.env.from_string(REGISTRY['sequence'][1]['variables']['updated']).render(stored=stored,ids=ids,op=op).strip()
+  return self.env.from_string(REGISTRY['sequence'][1]['variables']['updated']).render(stored=NS(value=stored),ids=ids,op=op).strip()
  def test_registry_adds_releases_and_preserves_previous_holds(self):
-  a=self.update('',['light.a']);self.assertEqual(a,hashlib.sha256(b'light.a').hexdigest()[:8])
-  both=self.update(a,['light.b']);self.assertEqual(len(both),16)
+  a=self.update('',['light.a']);self.assertEqual(a,'h:'+hashlib.sha256(b'light.a').hexdigest()[:8])
+  both=self.update(a,['light.b']);self.assertEqual(len(both),18)
   self.assertEqual(self.update(both,['light.b'],'release'),a)
-  self.assertEqual(self.update('*',[],'clear_all'),'')
+  self.assertEqual(self.update('*',[],'clear_all'),'h:')
   self.assertEqual(self.update('*',['light.a'],'release'),'*')
  def test_numeric_looking_tokens_remain_strings(self):
   for value in ['12345678','00000000','']:
    self.env.globals['states']=lambda entity:value
    rendered=self.env.from_string(REGISTRY['sequence'][0]['variables']['stored']).render()
-   self.assertIsInstance(rendered,str)
-   self.assertEqual(rendered,value)
-   command=self.env.from_string(REGISTRY['sequence'][-1]['data']['value']).render(updated=value)
+   self.assertEqual(rendered,{'value':value})
+   command=self.env.from_string(REGISTRY['sequence'][-1]['data']['value']).render(updated='h:'+value)
    self.assertIsInstance(command,str)
-   self.assertEqual(command,value)
+   self.assertEqual(command,'h:'+value)
  def test_capacity_invalid_state_and_collisions_fail_closed(self):
   self.assertEqual(self.update('',['light.x'+str(i) for i in range(32)]),'*')
   self.assertEqual(self.update('unknown',['light.a']),'*')

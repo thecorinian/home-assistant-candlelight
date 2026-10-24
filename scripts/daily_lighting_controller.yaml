@@ -1,0 +1,198 @@
+alias: Daily Lighting Controller
+description: Sunrise wake-up, 11:30 daylight takeover, sunset arrival, natural candlelight after 19:30, indoor off
+  by 22:00. Weather-aware white and decorative motifs; manual holds win until the 04:00 reset.
+max_exceeded: silent
+mode: single
+sequence:
+- variables:
+    candle_owned: false
+    last_sent: {}
+    smoothed_kelvin: null
+    white_updated: 0
+- repeat:
+    sequence:
+    - variables:
+        plan: "{% set clock=states('input_text.lighting_schedule_clock')|from_json({}) %}\n{% set t=as_timestamp(now())\
+          \ %}{% set minute=now().hour*60+now().minute+now().second/60 %}\n{% set rise=clock.get('rise',0)|float\
+          \ %}{% set setting=clock.get('set',0)|float %}\n{% set cutoff=as_timestamp(today_at('11:30')) %}\n{% set\
+          \ w=states(weather_entity) %}{% set temp=state_attr(weather_entity,'temperature')|float(50) %}\n{% if\
+          \ state_attr(weather_entity,'temperature_unit')=='\xB0C' %}{% set temp=temp*9/5+32 %}{% endif %}\n{% set\
+          \ fresh=states[weather_entity] is not none and t-as_timestamp(states[weather_entity].last_updated)<7200\
+          \ and w not in ['unknown','unavailable'] %}\n{% if not fresh %}{% set w='unknown' %}{% set temp=50 %}{%\
+          \ endif %}\n{% set cloud=state_attr(weather_entity,'cloud_coverage')|float(0) if fresh else 0 %}\n{% set\
+          \ dark=cloud>=85 or w in ['rainy','pouring','lightning-rainy','snowy','snowy-rainy','hail','fog'] %}\n\
+          {% set points=[(50,2000),(65,2700),(75,3500),(85,4500),(90,5000)] %}\n{% set ns=namespace(dayk=2000,nightk=2000,inside=0,outside=0,phase='night')\
+          \ %}\n{% for lo,hi in [(0,1),(1,2),(2,3),(3,4)] %}{% if temp>points[lo][0] %}{% set f=[1,(temp-points[lo][0])/(points[hi][0]-points[lo][0])]|min\
+          \ %}{% set ns.dayk=points[lo][1]+f*(points[hi][1]-points[lo][1]) %}{% endif %}{% endfor %}\n{% set ns.nightk=2000+700*([0,[1,(temp-50)/35]|min]|max)\
+          \ %}\n{% set wake_end=[rise+2700,cutoff-1800]|min %}{% set hold_end=[wake_end+3600,cutoff-900]|min %}\n\
+          {% set evening_start=setting-(4500 if dark else 2700) %}{% set evening_peak=setting+1800 %}\n{% if clock.get('date')==now().date()|string\
+          \ and rise>0 and setting>rise %}\n {% if t>=rise and t<wake_end %}{% set u=[0,[1,(t-rise)/[1,wake_end-rise]|max]|min]|max\
+          \ %}{% set ns.inside=80*u*u*(3-2*u) %}{% set ns.dayk=2000+(ns.dayk-2000)*u*u*(3-2*u) %}{% set ns.phase='wake'\
+          \ %}\n {% elif t>=wake_end and t<hold_end %}{% set ns.inside=80 %}{% set ns.phase='morning' %}\n {% elif\
+          \ t>=hold_end and t<cutoff %}{% set u=[0,[1,(t-hold_end)/[1,cutoff-hold_end]|max]|min]|max %}{% set ns.inside=80*(1-u*u*(3-2*u))\
+          \ %}{% set ns.phase='daylight_taper' %}\n {% elif t>=cutoff and t<evening_start %}{% set ns.inside=25\
+          \ if dark else 0 %}{% set ns.phase='day' %}\n {% elif t>=evening_start and minute<1320 %}{% set u=[0,[1,(t-evening_start)/[1,evening_peak-evening_start]|max]|min]|max\
+          \ %}{% set ns.inside=70*u*u*(3-2*u) %}{% set ns.phase='evening' %}\n {% endif %}\n {% if minute>=1140\
+          \ and minute<1320 %}{% set u=(minute%60)/60 %}{% set eased=u*u*(3-2*u) %}{% set ceiling=70-35*eased if\
+          \ minute<1200 else 35-20*eased if minute<1260 else 15*(1-eased) %}{% set ns.inside=[ns.inside,ceiling]|min\
+          \ %}{% endif %}\n {% if minute>=1170 and minute<1320 and ns.inside>0 %}{% set ns.phase='candlelight' %}{%\
+          \ endif %}\n {% if minute>=1320 or t<rise %}{% set ns.inside=0 %}{% set ns.phase='night' %}{% endif %}\n\
+          \ {% if t>=setting %}{% set u=[1,(t-setting)/1800]|min %}{% set ns.outside=50*u*u*(3-2*u) %}{% if minute>=1320\
+          \ %}{% set ns.outside=[ns.outside,25]|min %}{% endif %}\n {% elif t<rise-900 %}{% set ns.outside=18 %}{%\
+          \ if t>rise-2700 %}{% set u=(t-(rise-2700))/1800 %}{% set ns.outside=18*(1-u*u*(3-2*u)) %}{% endif %}{%\
+          \ endif %}\n{% endif %}\n{% if minute>=1260 %}{% set u=[1,(minute-1260)/60]|min %}{% set ns.nightk=2000+(ns.nightk-2000)*(1-u*u*(3-2*u))\
+          \ %}{% endif %}\n{% set k=ns.nightk if ns.phase in ['evening','candlelight','night'] else ns.dayk %}\n\
+          {% set age=t-as_timestamp(states[weather_entity].last_changed) if fresh else 999999 %}\n{% set motif=fresh\
+          \ and age>=600 and (age<690 or now().minute%30<2) %}\n{% set dew=state_attr(weather_entity,'dew_point')|float(-100)\
+          \ %}{% if state_attr(weather_entity,'temperature_unit')=='\xB0C' %}{% set dew=dew*9/5+32 %}{% endif %}\n\
+          {% set wind=state_attr(weather_entity,'wind_speed')|float(0) %}{% set unit=state_attr(weather_entity,'wind_speed_unit')\
+          \ %}\n{% if unit=='km/h' %}{% set wind=wind/1.60934 %}{% elif unit=='m/s' %}{% set wind=wind*2.23694 %}{%\
+          \ endif %}\n{% set kind='rain' if w in ['rainy','pouring','lightning-rainy','lightning'] else 'snow' if\
+          \ w in ['snowy','snowy-rainy'] else 'hail' if w=='hail' else 'fog' if w=='fog' else 'frost_risk' if fresh\
+          \ and temp<=36 and dew>=temp-4 else 'wind' if fresh and (wind>=12 or w in ['windy','windy-variant']) else\
+          \ 'none' %}\n{{ dict(phase=ns.phase,inside=ns.inside|round(1),outside=ns.outside|round(1),kelvin=k|round(0)|int,ceiling=ns.inside|round(1),weather=kind,motif=motif\
+          \ and kind!='none',stamp=t|int) }}"
+    - variables:
+        smoothed_kelvin: '{% set target=plan.kelvin|float %}{% set step=[0,[60,as_timestamp(now())-white_updated]|min]|max*2.5
+          %}{{ target if smoothed_kelvin is none else [target,smoothed_kelvin+step]|min if target>smoothed_kelvin
+          else [target,smoothed_kelvin-step]|max }}'
+        white_updated: '{{ as_timestamp(now()) }}'
+        plan: '{{ dict(plan,kelvin=((smoothed_kelvin/25)|round(0)*25)|int) }}'
+    - if:
+      - condition: template
+        value_template: '{{ states(''input_text.lighting_schedule_frame'')|from_json({}) != dict(ceiling=plan.ceiling,kelvin=plan.kelvin,phase=plan.phase)
+          }}'
+      then:
+      - action: input_text.set_value
+        data:
+          value: '{{ dict(ceiling=plan.ceiling,kelvin=plan.kelvin,phase=plan.phase)|to_json }}'
+        target:
+          entity_id: input_text.lighting_schedule_frame
+    - variables:
+        held: '{{ {''value'':states(''input_text.lighting_manual_off'')} }}'
+        present: '{% set anchor=strptime(alternating_week_start,''%Y-%m-%d %H:%M:%S'') %}{{ ((now().replace(tzinfo=None)-anchor).days//7)%2==0
+          }}'
+        preview: '{{ is_state(''script.custom_lighting_patterns'',''on'') or is_state(''script.synchronized_color_cycle'',''on'')
+          or is_state(''script.candlelight_wind_trial'',''on'') }}'
+    - if:
+      - condition: template
+        value_template: '{{ not preview and plan.phase != ''candlelight'' and candle_owned and is_state(''script.natural_candlelight'',''on'')
+          }}'
+      then:
+      - action: script.turn_off
+        target:
+          entity_id: script.natural_candlelight
+      - action: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.natural_candlelight_active
+    - variables:
+        commands: "{% set held=held.value %}{% set held=held[2:] if held.startswith('h:') else held %}{% set ns=namespace(cmds=[])\
+          \ %}{% set valid=held not in ['*','unknown','unavailable'] and held|length%8==0 %}\n{% for s in states.light\
+          \ if valid and not preview and s.entity_id not in excluded_lights and s.state in ['on','off'] and (s.entity_id|sha256)[:8]\
+          \ not in held and (s.entity_id not in alternating_week_lights or present) %}\n{% set modes=s.attributes.get('supported_color_modes',[])\
+          \ or [] %}{% set outdoor=s.entity_id in outdoor_lights %}\n{% if modes|reject('in',['onoff','unknown'])|list|count>0\
+          \ %}\n {% set b=plan.outside if outdoor else plan.inside %}{% set k=plan.kelvin %}\n {% if not outdoor\
+          \ and plan.phase in ['wake','morning','daylight_taper'] %}{% set b=[100,b*(1.25 if s.entity_id in morning_bright_lights\
+          \ else 0.75 if s.entity_id in circulation_lights else 1)]|min %}{% endif %}\n {% if not outdoor and plan.phase=='day'\
+          \ and s.entity_id in bedroom_lights %}{% set b=0 %}{% endif %}\n {% if not outdoor and plan.phase in ['evening','candlelight']\
+          \ %}{% set b=b*(0.7143 if s.entity_id in bedroom_lights else 0.5714 if s.entity_id in circulation_lights\
+          \ else 1) %}{% endif %}\n {% set hs=[] %}{% set phase=as_timestamp(now()) %}\n {% if b>0 and plan.motif\
+          \ and (outdoor or plan.phase not in ['candlelight','night']) %}\n  {% set wave=(1+sin(phase/8))/2 %}\n\
+          \  {% if plan.weather=='rain' %}{% set hs=[205,25+60*wave] %}{% set b=b*(0.75+0.25*wave) %}\n  {% elif\
+          \ plan.weather in ['snow','frost_risk'] %}{% set hs=[240,10+85*wave] %}{% set b=b*(0.85+0.15*wave) %}\n\
+          \  {% elif plan.weather=='hail' %}{% set hs=[215,20+55*wave] %}{% set b=b*(0.7+0.3*((1+sin(phase/3+0.4*sin(phase/8)))/2))\
+          \ %}\n  {% elif plan.weather=='wind' %}{% set b=b*(0.65+0.35*((1+sin(phase/3+sin(phase/7)))/2)) %}\n \
+          \ {% elif plan.weather=='fog' %}{% set b=b*(0.8+0.2*wave) %}{% endif %}\n {% endif %}\n {% if not outdoor\
+          \ and plan.phase=='candlelight' and is_state('script.natural_candlelight','on') %}{% set b=-1 %}{% endif\
+          \ %}\n {% if b>=0 %}\n  {% set prev=last_sent.get(s.entity_id,{}) %}{% set target=b|round(0)|int %}\n\
+          \  {% if target>0 and not prev %}{% set target=[target,((s.attributes.get('brightness',0)|float)*100/255\
+          \ if s.state=='on' else 1)+5]|min|round(0)|int %}\n  {% elif target>0 and prev and (target-prev.get('b',target))|abs>5\
+          \ %}{% set target=(prev.get('b',target)+5 if target>prev.get('b',target) else prev.get('b',target)-5)|round(0)|int\
+          \ %}{% endif %}\n  {% set k=[s.attributes.get('min_color_temp_kelvin',2000)|int,[k,s.attributes.get('max_color_temp_kelvin',6500)|int]|min]|max\
+          \ %}\n  {% set data={'brightness_pct':[1,target]|max} %}{% if hs and 'hs' in modes %}{% set data=dict(data,hs_color=hs)\
+          \ %}{% elif 'color_temp' in modes %}{% set data=dict(data,color_temp_kelvin=k) %}{% endif %}\n  {% set\
+          \ changed=not prev or (target-prev.get('b',target))|abs>=2 or data.get('color_temp_kelvin')!=prev.get('k')\
+          \ or (hs and (hs[1]-prev.get('sat',-100))|abs>=4) or (not hs and prev.get('sat') is not none) %}\n  {%\
+          \ set due=(as_timestamp(now())-prev.get('time',0))>120 %}\n  {% if (target>0 and (changed or due)) or\
+          \ (target<=0 and s.state=='on' and (prev.get('b',1)>0 or due)) %}\n   {% set ns.cmds=ns.cmds+[dict(id=s.entity_id,b=target,k=data.get('color_temp_kelvin'),sat=hs[1]\
+          \ if hs else none,data=data,was_on=s.state=='on',time=as_timestamp(now()))] %}\n  {% endif %}\n {% endif\
+          \ %}\n{% endif %}{% endfor %}{{ ns.cmds }}"
+    - variables:
+        off_tokens: '{% set ns=namespace(tokens=[]) %}{% for c in commands if c.b<=0 %}{% set ns.tokens=ns.tokens+[(c.id|sha256)[:8]]
+          %}{% endfor %}{{ ''h:''+(ns.tokens|join('''')) }}'
+        on_tokens: '{% set ns=namespace(tokens=[]) %}{% for c in commands if c.b>0 and not c.was_on %}{% set ns.tokens=ns.tokens+[(c.id|sha256)[:8]]
+          %}{% endfor %}{{ ''h:''+(ns.tokens|join('''')) }}'
+    - repeat:
+        for_each: '{{ [{''helper'':''input_text.lighting_schedule_on_targets'',''tokens'':on_tokens},{''helper'':''input_text.lighting_schedule_off_targets'',''tokens'':off_tokens}]
+          }}'
+        sequence:
+        - if:
+          - condition: template
+            value_template: '{{ repeat.item.tokens|length>2 }}'
+          then:
+          - action: input_text.set_value
+            data:
+              value: ''
+            target:
+              entity_id: '{{ repeat.item.helper }}'
+          - action: input_text.set_value
+            data:
+              value: '{{ repeat.item.tokens }}'
+            target:
+              entity_id: '{{ repeat.item.helper }}'
+    - repeat:
+        for_each: '{{ commands }}'
+        sequence:
+        - if:
+          - condition: template
+            value_template: '{{ is_state(''input_boolean.daily_lighting_schedule_active'',''on'') and states(''input_text.lighting_manual_off'')
+              not in [''*'',''unknown'',''unavailable''] and (repeat.item.id|sha256)[:8] not in states(''input_text.lighting_manual_off'')
+              }}'
+          then:
+          - choose:
+            - conditions: '{{ repeat.item.b>0 }}'
+              sequence:
+              - action: light.turn_on
+                continue_on_error: true
+                data: '{{ repeat.item.data }}'
+                target:
+                  entity_id: '{{ repeat.item.id }}'
+            default:
+            - action: light.turn_off
+              continue_on_error: true
+              target:
+                entity_id: '{{ repeat.item.id }}'
+          - variables:
+              last_sent: '{{ dict(last_sent,**{repeat.item.id:repeat.item}) }}'
+    - if:
+      - condition: template
+        value_template: '{{ not preview and plan.phase==''candlelight'' and not is_state(''script.natural_candlelight'',''on'')
+          and not is_state(''script.lighting_off_priority'',''on'') }}'
+      then:
+      - action: script.turn_on
+        data:
+          variables:
+            automatic_fade: false
+            lights: []
+            minutes: 0
+            only_on: true
+            preserve_brightness: true
+            scheduled_mode: true
+        target:
+          entity_id: script.natural_candlelight
+      - variables:
+          candle_owned: true
+    - delay:
+        seconds: 2
+    while:
+    - condition: template
+      value_template: '{{ is_state(''input_boolean.daily_lighting_schedule_active'',''on'') }}'
+variables:
+  alternating_week_lights: []
+  alternating_week_start: '2026-01-02 16:00:00'
+  bedroom_lights: []
+  circulation_lights: []
+  excluded_lights: []
+  morning_bright_lights: []
+  outdoor_lights: []
+  weather_entity: weather.forecast_home
