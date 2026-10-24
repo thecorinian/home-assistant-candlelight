@@ -41,3 +41,43 @@ python3 -m unittest discover -s tests -v
 ```
 
 Tests render the shipped Jinja selection and model templates to check off/unavailable exclusions, event continuity and pruning, brightness bounds, different bulb responses, baseline transition continuity, and weighted dwell distribution. They do not emulate Home Assistant's scheduler or Tuya's physical response. Installation and live integration tests are recorded separately from these deterministic checks.
+
+## Optional three-minute wind experiment
+
+`experiments/candlelight_wind_trial.yaml` adds 3–5-pulse clusters, quieter gaps between clusters, and a first-order smoothing response that suggests filament inertia. It keeps the same weighted baseline holds and warm-white color. Its experimental floor is 20%; the everyday model's floor remains 25%. It does not yet implement rapid triplet bursts.
+
+Install it as a separate script with entity ID `script.candlelight_wind_trial`. Run normal Natural Candlelight first, then run the trial and choose the bulbs to test. Only currently-on bulbs participate. The trial temporarily pauses the nightly automation, moves the normal controller to the other bulbs, and runs the selected group for three minutes. It then restarts the normal model on all currently-on eligible lights and restores the nightly automation's previous enabled state. The model is experimental and is not selected by the nightly automation.
+
+Allow the timed trial to finish. If you interrupt it through `script.turn_off` or restart/reload Home Assistant, its final cleanup actions cannot run. Recovery: stop both scripts, turn the Active helper off, restart Natural Candlelight with `only_on: true`, and re-enable the nightly automation if you normally use it. The trial intentionally resumes the normal model on all lit bulbs rather than restoring a previous manually selected subgroup.
+
+## Example action calls
+
+Run a selected group (replace the example IDs):
+
+```yaml
+action: script.turn_on
+target:
+  entity_id: script.natural_candlelight
+data:
+  variables:
+    lights:
+      - light.example_lamp_1
+      - light.example_lamp_2
+    only_on: true
+    minutes: 0
+```
+
+Run the optional experiment on the same group:
+
+```yaml
+action: script.turn_on
+target:
+  entity_id: script.candlelight_wind_trial
+data:
+  variables:
+    lights:
+      - light.example_lamp_1
+      - light.example_lamp_2
+```
+
+This project uses built-in Home Assistant scripts and automation actions. No HACS component or bulb-firmware modification is required. Bulbs must support dimming. Actual cadence depends on bulb count, the integration, and network/cloud latency; the model cannot guarantee physically smooth high-frequency flicker on every device.

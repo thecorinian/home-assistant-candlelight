@@ -1,0 +1,306 @@
+alias: Candlelight Wind Trial
+description: 'Three-minute experiment: clustered wind dips and a thermal-style brightness response, with the saved weighted
+  baselines. Restores normal candlelight afterward. Requires Natural Candlelight already running.'
+icon: mdi:candle
+mode: single
+fields:
+  lights:
+    name: Bulbs
+    description: Choose the currently-on bulbs to test for three minutes.
+    required: true
+    selector:
+      entity:
+        filter:
+          domain: light
+        multiple: true
+variables:
+  excluded_lights: []
+  pause_helpers: []
+  pause_automations: []
+  trial_script_entity: script.candlelight_wind_trial
+sequence:
+- condition: template
+  value_template: '{{ is_state(''script.natural_candlelight'', ''on'') and lights | default([], true) | count > 0 }}'
+- variables:
+    requested: '{{ lights | default([], true) }}'
+    run_minutes: 3
+    only_lit: true
+    night_was_on: '{{ is_state(''automation.nightly_natural_candlelight'', ''on'') }}'
+    seed: '{{ (range(0, 62832) | random) / 10000 }}'
+- variables:
+    bulbs: |-
+      {% set out = namespace(ids=[]) %}
+      {% set source = expand(requested) if requested | count > 0 else states.light %}
+      {% for s in source %}
+        {% set modes = s.attributes.get('supported_color_modes', []) or [] %}
+        {% if s.domain == 'light' and s.state in ['on', 'off'] and s.entity_id not in excluded_lights
+              and modes | reject('in', ['onoff', 'unknown']) | list | count > 0
+              and (not only_lit or s.state == 'on') %}
+          {% set out.ids = out.ids + [s.entity_id] %}
+        {% endif %}
+      {% endfor %}
+      {{ out.ids | unique | sort | list }}
+- if:
+  - condition: template
+    value_template: '{{ bulbs | count == 0 }}'
+  then:
+  - stop: No available dimmable bulbs were selected.
+- if:
+  - condition: template
+    value_template: '{{ night_was_on }}'
+  then:
+  - action: automation.turn_off
+    target:
+      entity_id: automation.nightly_natural_candlelight
+    data:
+      stop_actions: true
+- action: script.stop_natural_candlelight
+- wait_template: '{{ is_state(''script.natural_candlelight'', ''off'') }}'
+  timeout: 00:00:30
+  continue_on_timeout: true
+- if:
+  - condition: state
+    entity_id: script.natural_candlelight
+    state: 'on'
+  then:
+  - action: script.turn_off
+    target:
+      entity_id: script.natural_candlelight
+- variables:
+    other_lights: '{{ states.light | map(attribute=''entity_id'') | reject(''in'', bulbs) | list }}'
+- if:
+  - condition: template
+    value_template: '{{ other_lights | count > 0 }}'
+  then:
+  - action: script.turn_on
+    target:
+      entity_id: script.natural_candlelight
+    data:
+      variables:
+        lights: '{{ other_lights }}'
+        only_on: true
+        minutes: 0
+- if:
+  - condition: template
+    value_template: '{{ pause_helpers | count > 0 }}'
+  then:
+  - action: input_boolean.turn_off
+    target:
+      entity_id: '{{ pause_helpers }}'
+- if:
+  - condition: template
+    value_template: '{{ pause_automations | count > 0 }}'
+  then:
+  - action: automation.turn_off
+    target:
+      entity_id: '{{ pause_automations }}'
+    data:
+      stop_actions: true
+  - action: automation.turn_on
+    target:
+      entity_id: '{{ pause_automations }}'
+- repeat:
+    for_each: '{{ bulbs }}'
+    sequence:
+    - action: light.turn_on
+      continue_on_error: true
+      target:
+        entity_id: '{{ repeat.item }}'
+      data: |-
+        {% set modes = state_attr(repeat.item, 'supported_color_modes') or [] %} {% if 'color_temp' in modes %}
+          {% set low = state_attr(repeat.item, 'min_color_temp_kelvin') | int(2000) %}
+          {% set high = state_attr(repeat.item, 'max_color_temp_kelvin') | int(6500) %}
+          {{ {'color_temp_kelvin': [low, [2000, high] | min] | max} }}
+        {% else %}
+          {{ {} }}
+        {% endif %}
+- delay:
+    milliseconds: 500
+- repeat:
+    for_each: '{{ bulbs }}'
+    sequence:
+    - if:
+      - condition: template
+        value_template: '{{ is_state(repeat.item, ''on'') }}'
+      then:
+      - action: light.turn_on
+        continue_on_error: true
+        target:
+          entity_id: '{{ repeat.item }}'
+        data:
+          brightness_pct: 70
+- variables:
+    started: '{{ as_timestamp(now()) }}'
+    gust_events: []
+    prepared_bulbs: '{{ bulbs }}'
+    baseline_from: 70
+    baseline_target: 70
+    baseline_changed: 0
+    baseline_next: '{{ range(30, 181) | random }}'
+    baseline_blend_seconds: 20
+    last_levels: {}
+    last_times: {}
+    wind_pulses: |-
+      {% set ns = namespace(t=range(8, 15) | random, pulses=[]) %}
+      {% for cluster in range(20) %}
+        {% for n in range(range(3, 6) | random) %}
+          {% set width = (range(25, 46) | random) / 10 %}
+          {% set ns.pulses = ns.pulses + [[ns.t, width, range(20, 41) | random]] %}
+          {% set ns.t = ns.t + width + (range(8, 19) | random) / 10 %}
+        {% endfor %}
+        {% set ns.t = ns.t + (range(12, 31) | random) %}
+      {% endfor %}
+      {{ ns.pulses }}
+- repeat:
+    while:
+    - condition: template
+      value_template: '{{ is_state(trial_script_entity, ''on'') and ((run_minutes | float) == 0 or as_timestamp(now()) - (started
+        | float) < (run_minutes | float)*60) and expand(bulbs) | selectattr(''state'',''eq'',''on'') | list | count > 0 }}'
+    sequence:
+    - variables:
+        bulbs: |-
+          {% set out = namespace(ids=[]) %}
+          {% set source = expand(requested) if requested | count > 0 else states.light %}
+          {% for s in source %}
+            {% set modes = s.attributes.get('supported_color_modes', []) or [] %}
+            {% if s.domain == 'light' and s.state in ['on', 'off'] and s.entity_id not in excluded_lights
+                  and modes | reject('in', ['onoff', 'unknown']) | list | count > 0
+                  and (not only_lit or s.state == 'on') %}
+              {% set out.ids = out.ids + [s.entity_id] %}
+            {% endif %}
+          {% endfor %}
+          {{ out.ids | unique | sort | list }}
+    - variables:
+        prepared_bulbs: '{{ prepared_bulbs | select(''in'', bulbs) | select(''is_state'', ''on'') | list }}'
+    - variables:
+        elapsed: '{{ as_timestamp(now()) - (started | float) }}'
+    - if:
+      - condition: template
+        value_template: '{{ (elapsed | float) >= (baseline_next | float) }}'
+      then:
+      - variables:
+          baseline_from: '{{ baseline_target }}'
+          baseline_target: '{{ [80, 80, 70, 50] | random }}'
+          baseline_changed: '{{ elapsed }}'
+          baseline_blend_seconds: '{{ range(15, 31) | random }}'
+          baseline_next: '{{ (elapsed | float) + (baseline_blend_seconds | float) + (range(30, 181) | random) }}'
+    - if:
+      - condition: template
+        value_template: '{{ gust_events | count == 0 or (elapsed | float) > (gust_events[-1][0] | float) - 30 }}'
+      then:
+      - variables:
+          gust_events: |-
+            {% set ns = namespace(events=[], t=elapsed | float, index=-1) %} {% for event in gust_events %}
+              {% if event[0] > (elapsed | float) - 27 - (states.light | list | count)*0.31 %}
+                {% set ns.events = ns.events + [event] %}
+              {% endif %}
+              {% set ns.t = [ns.t, event[0]] | max %}
+              {% set ns.index = event[3] %}
+            {% endfor %} {% for n in range(48) %}
+              {% set u = (range(1, 1000) | random) / 1000 %}
+              {% set ns.t = ns.t + 4 - 5.5*log(u) %}
+              {% set ns.index = ns.index + 1 %}
+              {% set ns.events = ns.events + [[ns.t, range(55, 101) | random,
+                   (range(170, 291) | random) / 100, ns.index]] %}
+            {% endfor %} {{ ns.events }}
+    - repeat:
+        for_each: '{{ bulbs }}'
+        sequence:
+        - if:
+          - condition: template
+            value_template: |-
+              {{ is_state(trial_script_entity, 'on')
+                 and is_state(repeat.item, 'on')
+                 and ((run_minutes | float) == 0 or
+                      as_timestamp(now()) - (started | float) < (run_minutes | float)*60) }}
+          then:
+          - if:
+            - condition: template
+              value_template: '{{ repeat.item not in prepared_bulbs }}'
+            then:
+            - action: light.turn_on
+              continue_on_error: true
+              target:
+                entity_id: '{{ repeat.item }}'
+              data: |-
+                {% set modes = state_attr(repeat.item, 'supported_color_modes') or [] %} {% if 'color_temp' in modes %}
+                  {% set low = state_attr(repeat.item, 'min_color_temp_kelvin') | int(2000) %}
+                  {% set high = state_attr(repeat.item, 'max_color_temp_kelvin') | int(6500) %}
+                  {{ {'color_temp_kelvin': [low, [2000, high] | min] | max} }}
+                {% else %}
+                  {{ {} }}
+                {% endif %}
+            - delay:
+                milliseconds: 500
+            - variables:
+                prepared_bulbs: '{{ prepared_bulbs + [repeat.item] }}'
+          - variables:
+              baseline: |-
+                {% set age = as_timestamp(now()) - (started | float) - (baseline_changed | float) %}
+                {% set u = [0.0, [1.0, age / (baseline_blend_seconds | float)] | min] | max %}
+                {% set blend = u*u*(3 - 2*u) %}
+                {{ (baseline_from | float) + ((baseline_target | float) - (baseline_from | float))*blend }}
+          - variables:
+              raw_level: |-
+                {% set t = as_timestamp(now()) - (started | float) %} {% set all_ids = states.light | map(attribute='entity_id') | sort | list %}
+                {% set i = all_ids.index(repeat.item) %} {% set p = (seed | float) + i * 2.39996 %} {% set envelope = 0.35 + 0.65 * (sin(0.17*t + (seed | float)) ** 2) %} {% set turbulence = envelope * (1.8*sin(0.61*t+p) + 1.2*sin(1.13*t+1.9*p) + 0.8*sin(1.97*t+0.7*p) + 0.4*sin(2.3*t+2.4*p)) %} {% set response = namespace(value=0.0) %} {% for event in gust_events %}
+                  {% set tau = (t - event[0] - i*0.31) / event[2] %}
+                  {% if tau >= 0 and tau < 9 %}
+                    {% set coupling = 0.8 + 0.2*(sin(p+event[3]*1.7) ** 2) %}
+                    {% set onset = [1.0, tau / 0.35] | min %}
+                    {% set smooth_onset = onset*onset*(3 - 2*onset) %}
+                    {% set response.value = response.value - event[1] * coupling * smooth_onset * (2.718281828 ** (-0.85*tau)) * sin(2.5*tau) %}
+                  {% endif %}
+                {% endfor %} {% set wind = namespace(value=0.0) %}
+                {% for pulse in wind_pulses %}
+                  {% set x = (t - pulse[0] - i*0.13) / pulse[1] %}
+                  {% if x >= 0 and x <= 1 %}
+                    {% set wind.value = wind.value - pulse[2]*(sin(3.141592653589793*x)**2) %}
+                  {% endif %}
+                {% endfor %}
+                {{ [20, [100, ((baseline | float) + turbulence + response.value + wind.value) | round | int] | min] | max }}
+          - variables:
+              level: |-
+                {% set t = as_timestamp(now()) - (started | float) %}
+                {% set previous = last_levels.get(repeat.item, 70) | float %}
+                {% set dt = [0.0, t - (last_times.get(repeat.item, 0) | float)] | max %}
+                {% set alpha = 1 - 2.718281828 ** (-dt / 0.9) %}
+                {{ [20, [100, (previous + alpha*((raw_level | float)-previous)) | round | int] | min] | max }}
+          - action: light.turn_on
+            continue_on_error: true
+            target:
+              entity_id: '{{ repeat.item }}'
+            data:
+              brightness_pct: '{{ level | int }}'
+          - variables:
+              last_levels: '{{ dict(last_levels, **{repeat.item: level | float}) }}'
+              last_times: '{{ dict(last_times, **{repeat.item: as_timestamp(now()) - (started | float)}) }}'
+          - delay:
+              milliseconds: '{{ [125, 150, 175, 200] | random }}'
+- action: script.stop_natural_candlelight
+- wait_template: '{{ is_state(''script.natural_candlelight'', ''off'') }}'
+  timeout: 00:00:30
+  continue_on_timeout: true
+- if:
+  - condition: state
+    entity_id: script.natural_candlelight
+    state: 'on'
+  then:
+  - action: script.turn_off
+    target:
+      entity_id: script.natural_candlelight
+- action: script.turn_on
+  target:
+    entity_id: script.natural_candlelight
+  data:
+    variables:
+      lights: []
+      only_on: true
+      minutes: 0
+- if:
+  - condition: template
+    value_template: '{{ night_was_on }}'
+  then:
+  - action: automation.turn_on
+    target:
+      entity_id: automation.nightly_natural_candlelight
