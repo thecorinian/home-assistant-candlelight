@@ -25,7 +25,7 @@ sequence:
 - variables:
     ids: '{{ expand(lights|default([]))|selectattr(''domain'',''eq'',''light'')|map(attribute=''entity_id'')|list
       }}'
-    stored: '{{ states(''input_text.lighting_manual_off'') }}'
+    stored: '{{ states(''input_text.lighting_manual_off'')|to_json }}'
     op: '{{ operation|default(''hold'') }}'
 - variables:
     updated: '{% set ns=namespace(old=[],tokens=[],alltokens=[]) %}
@@ -38,17 +38,17 @@ sequence:
 
       {% set collision=ns.alltokens|count != ns.alltokens|unique|list|count %}
 
-      {% if op==''clear_all'' %}{{ '''' }}
+      {% if op==''clear_all'' %}{{ ''''|to_json }}
 
-      {% elif stored in [''*'',''unknown'',''unavailable''] or stored|length % 8 != 0 or collision %}{{ ''*''
+      {% elif stored in [''*'',''unknown'',''unavailable''] or stored|length % 8 != 0 or collision %}{{ ''*''|to_json
       }}
 
       {% else %}{% set result=(ns.old+ns.tokens)|unique|sort|list if op==''hold'' else ns.old|reject(''in'',ns.tokens)|list
       %}
 
-      {{ result|join('''') if result|count<=31 else ''*'' }}{% endif %}'
+      {{ (result|join('''') if result|count<=31 else ''*'')|to_json }}{% endif %}'
 - action: input_text.set_value
   target:
     entity_id: input_text.lighting_manual_off
   data:
-    value: '{{ updated }}'
+    value: '{{ updated|to_json }}'

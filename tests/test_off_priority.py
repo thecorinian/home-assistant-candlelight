@@ -32,6 +32,15 @@ class OffPriority(unittest.TestCase):
   self.assertEqual(self.update(both,['light.b'],'release'),a)
   self.assertEqual(self.update('*',[],'clear_all'),'')
   self.assertEqual(self.update('*',['light.a'],'release'),'*')
+ def test_numeric_looking_tokens_remain_strings(self):
+  for value in ['12345678','00000000','']:
+   self.env.globals['states']=lambda entity:value
+   rendered=self.env.from_string(REGISTRY['sequence'][0]['variables']['stored']).render()
+   self.assertIsInstance(rendered,str)
+   self.assertEqual(rendered,value)
+   command=self.env.from_string(REGISTRY['sequence'][-1]['data']['value']).render(updated=value)
+   self.assertIsInstance(command,str)
+   self.assertEqual(command,value)
  def test_capacity_invalid_state_and_collisions_fail_closed(self):
   self.assertEqual(self.update('',['light.x'+str(i) for i in range(32)]),'*')
   self.assertEqual(self.update('unknown',['light.a']),'*')

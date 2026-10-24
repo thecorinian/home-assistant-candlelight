@@ -1,6 +1,7 @@
 """Exercise the shipped Jinja templates without connecting to any lights."""
 import ast
 import hashlib
+import json
 import math
 import random
 from pathlib import Path
@@ -26,6 +27,7 @@ class Templates(unittest.TestCase):
  def setUp(self):
   self.lights=[bulb('a'),bulb('b','off'),bulb('dead','unavailable'),bulb('switch',modes=['onoff'])]
   self.env=NativeEnvironment()
+  self.env.filters['to_json']=json.dumps
   self.env.filters['sha256']=lambda value:hashlib.sha256(value.encode()).hexdigest()
   self.env.filters['bool']=lambda value: str(value).lower() in ('true','on','yes','1','enable')
   self.compiled={}
