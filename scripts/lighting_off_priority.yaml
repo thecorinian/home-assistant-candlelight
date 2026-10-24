@@ -1,0 +1,79 @@
+alias: Lighting Off Priority
+description: Record a persistent manual-off hold before resuming any effects. Stop indoor effects, reinforce
+  the requested off for three seconds, and resume candlelight only on unheld lit bulbs.
+icon: mdi:lightbulb-off-outline
+mode: parallel
+max: 40
+max_exceeded: silent
+fields:
+  lights:
+    name: Bulbs to keep off
+    required: true
+    selector:
+      entity:
+        filter:
+          domain: light
+        multiple: true
+variables:
+  controllers:
+  - script.natural_candlelight
+  - script.custom_lighting_patterns
+  - script.synchronized_color_cycle
+  - script.candlelight_wind_trial
+  coupled_fixtures: []
+sequence:
+- variables:
+    off_bulbs: '{{ expand(lights|default([]))|selectattr(''domain'',''eq'',''light'')|map(attribute=''entity_id'')|list
+      }}'
+    candle_was_on: '{{ is_state(''script.natural_candlelight'',''on'') }}'
+    running: '{{ controllers|select(''is_state'',''on'')|list }}'
+- condition: template
+  value_template: '{{ off_bulbs|count>0 }}'
+- if:
+  - condition: template
+    value_template: '{{ running|count>0 }}'
+  then:
+  - action: script.turn_off
+    target:
+      entity_id: '{{ running }}'
+- variables:
+    active_helpers: '{{ [''input_boolean.natural_candlelight_active'',''input_boolean.synchronized_color_cycle_active'']|select(''is_state'',''on'')|list
+      }}'
+- if:
+  - condition: template
+    value_template: '{{ active_helpers|count>0 }}'
+  then:
+  - action: input_boolean.turn_off
+    target:
+      entity_id: '{{ active_helpers }}'
+- variables:
+    hold_bulbs: '{% set ns=namespace(ids=off_bulbs) %}{% for pair in coupled_fixtures %}{% if pair|select(''in'',off_bulbs)|list|count>0
+      %}{% set ns.ids=ns.ids+pair %}{% endif %}{% endfor %}{{ ns.ids|unique|list }}'
+- action: script.lighting_manual_off_registry
+  data:
+    lights: '{{ hold_bulbs }}'
+    operation: hold
+- repeat:
+    count: 4
+    sequence:
+    - action: light.turn_off
+      continue_on_error: true
+      target:
+        entity_id: '{{ off_bulbs }}'
+    - delay:
+        milliseconds: 750
+- if:
+  - condition: template
+    value_template: '{{ candle_was_on and is_state(''automation.nightly_natural_candlelight'',''on'') and not
+      is_state(''script.sunrise_fade_off'',''on'') and (now().hour>=21 or (now().hour<12 and is_state(''sun.sun'',''below_horizon'')))
+      }}'
+  then:
+  - action: script.turn_on
+    target:
+      entity_id: script.natural_candlelight
+    data:
+      variables:
+        lights: []
+        only_on: true
+        minutes: 0
+        preserve_brightness: true

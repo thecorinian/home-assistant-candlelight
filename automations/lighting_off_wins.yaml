@@ -1,0 +1,79 @@
+alias: Lighting Off Wins
+description: Record manual off holds, including coupled fixtures. Release on direct Home Assistant turn-on
+  requests or a fresh on state after at least 30 seconds confirmed off. Cloud on feedback alone cannot erase
+  an off hold immediately.
+mode: parallel
+max: 40
+max_exceeded: silent
+triggers:
+- trigger: event
+  event_type: state_changed
+  id: state_change
+- trigger: event
+  event_type: call_service
+  id: service_change
+variables:
+  excluded_lights: []
+  controllers:
+  - script.natural_candlelight
+  - script.custom_lighting_patterns
+  - script.synchronized_color_cycle
+  - script.candlelight_wind_trial
+  coupled_fixtures: []
+  operation: '{% set d=trigger.event.data %}{% if trigger.id==''state_change'' %}
+
+    {% if d.entity_id.startswith(''light.'') and d.old_state is not none and d.new_state is not none and d.new_state.context.parent_id
+    is none %}
+
+    {% if d.old_state.state==''on'' and d.new_state.state==''off'' %}hold{% elif d.old_state.state==''off''
+    and d.new_state.state==''on'' and as_timestamp(d.new_state.last_changed)-as_timestamp(d.old_state.last_changed)>=30
+    and not is_state(''script.lighting_off_priority'',''on'') %}release{% else %}ignore{% endif %}
+
+    {% else %}ignore{% endif %}
+
+    {% else %}{% if d.domain in [''light'',''homeassistant''] and d.service in [''turn_off'',''turn_on''] and
+    trigger.event.context.parent_id is none %}{{ ''hold'' if d.service==''turn_off'' else ''release'' }}{%
+    else %}ignore{% endif %}{% endif %}'
+conditions:
+- condition: template
+  value_template: '{{ operation|trim in [''hold'',''release''] and not is_state(''script.sunrise_fade_off'',''on'')
+    }}'
+actions:
+- variables:
+    requested: '{% if trigger.id == ''state_change'' %}{{ [trigger.event.data.entity_id] }}{% else %}
+
+      {% set d=trigger.event.data.service_data %}{% set ns=namespace(ids=[]) %}
+
+      {% set selected=d.get(''entity_id'',[]) %}{% if selected is string %}{% set selected=selected.split('','')|map(''trim'')|list
+      %}{% endif %}
+
+      {% if ''all'' in selected %}{% set ns.ids=states.light|map(attribute=''entity_id'')|list %}{% else %}{%
+      set ns.ids=selected %}{% endif %}
+
+      {% set areas=d.get(''area_id'',[]) %}{% if areas is string %}{% set areas=[areas] %}{% endif %}{% for
+      a in areas %}{% set ns.ids=ns.ids+area_entities(a) %}{% endfor %}
+
+      {% set devices=d.get(''device_id'',[]) %}{% if devices is string %}{% set devices=[devices] %}{% endif
+      %}{% for dev in devices %}{% set ns.ids=ns.ids+device_entities(dev) %}{% endfor %}
+
+      {{ ns.ids|unique|list }}{% endif %}'
+- variables:
+    targets: '{{ expand(requested)|selectattr(''domain'',''eq'',''light'')|map(attribute=''entity_id'')|reject(''in'',excluded_lights)|list
+      }}'
+- condition: template
+  value_template: '{{ targets|count>0 }}'
+- if:
+  - condition: template
+    value_template: '{{ operation|trim==''hold'' }}'
+  then:
+  - action: script.lighting_off_priority
+    data:
+      lights: '{{ targets }}'
+  else:
+  - variables:
+      release_bulbs: '{% set ns=namespace(ids=targets) %}{% for pair in coupled_fixtures %}{% if pair|select(''in'',targets)|list|count>0
+        %}{% set ns.ids=ns.ids+pair %}{% endif %}{% endfor %}{{ ns.ids|unique|list }}'
+  - action: script.lighting_manual_off_registry
+    data:
+      lights: '{{ release_bulbs }}'
+      operation: release

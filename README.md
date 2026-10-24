@@ -7,12 +7,15 @@ The effect combines overlapping waves, randomized gusts, eased transitions, and 
 ## Install through Home Assistant
 
 1. In **Settings → Devices & services → Helpers**, create a Toggle named **Natural Candlelight Active**. Confirm its entity ID is `input_boolean.natural_candlelight_active`.
-2. In **Settings → Automations & scenes → Scripts**, create a script, choose **Edit in YAML**, and paste `scripts/natural_candlelight.yaml`. Confirm its entity ID is `script.natural_candlelight`.
-3. Create a second script using `scripts/stop_natural_candlelight.yaml`. Confirm `script.stop_natural_candlelight`.
-4. Create a third script using `scripts/sunrise_fade_off.yaml`. Confirm `script.sunrise_fade_off`.
-5. Create an automation using **Edit in YAML** and `automations/nightly_natural_candlelight.yaml`. Save it as **Nightly Natural Candlelight** and leave it enabled.
+2. Create a **Text** helper named **Lighting Manual Off**, entity ID `input_text.lighting_manual_off`, minimum length 0 and maximum length 255. Set its value to an empty string. It stores manual-off holds across restarts.
+3. In **Settings → Automations & scenes → Scripts**, create a script, choose **Edit in YAML**, and paste `scripts/natural_candlelight.yaml`. Confirm its entity ID is `script.natural_candlelight`.
+4. Create a second script using `scripts/stop_natural_candlelight.yaml`. Confirm `script.stop_natural_candlelight`.
+5. Create a third script using `scripts/sunrise_fade_off.yaml`. Confirm `script.sunrise_fade_off`.
+6. Install `scripts/lighting_manual_off_registry.yaml` as `script.lighting_manual_off_registry` and `scripts/resume_automatic_lighting.yaml` as `script.resume_automatic_lighting`.
+7. Create a script from `scripts/lighting_off_priority.yaml` as **Lighting Off Priority** (`script.lighting_off_priority`), then create and enable an automation from `automations/lighting_off_wins.yaml` as **Lighting Off Wins** (`automation.lighting_off_wins`).
+8. Create an automation using **Edit in YAML** and `automations/nightly_natural_candlelight.yaml`. Save it as **Nightly Natural Candlelight** (`automation.nightly_natural_candlelight`) and leave it enabled.
 
-The nightly automation runs from **9:00 PM in Home Assistant's configured local time until local sunrise**, using Home Assistant's Sun integration. It handles startup during the window, a light switching on, and a once-per-minute check that restarts an idle controller. It does not interrupt an active timed wind trial, synchronized color cycle, or sunrise fade. It leaves off lights off and includes newly discovered eligible lights. Unavailable lights and on/off-only lights are skipped.
+The nightly automation runs from **9:00 PM in Home Assistant's configured local time until local sunrise**, using Home Assistant's Sun integration. It handles startup during the window, a light switching on, and a once-per-minute check that restarts an idle controller. Newly switched-on eligible bulbs rise from 1% to 80% over 10 seconds before joining candlelight. Existing lit bulbs retain their brightness during recovery. It does not interrupt an active timed wind trial, synchronized color cycle, or sunrise fade. It leaves off lights off and includes newly discovered eligible lights. Unavailable lights and on/off-only lights are skipped.
 
 At **local sunrise**, candlelight stops at its current brightness and all eligible lights already on gradually fade to off over **30 minutes**. Each bulb starts from its own brightness, using an eased curve with small updates about every 15 seconds. The fade preserves color and never raises a manually lowered brightness. Lights switched off remain off; lights newly switched on after the fade starts are outside its initial snapshot. Final off commands are retried up to three times, but an unreachable bulb cannot be guaranteed to respond. Home Assistant must be running at sunrise; an interrupted fade does not resume automatically after a restart.
 
@@ -28,7 +31,7 @@ The Active helper is a stop/status control: turning it off stops the running eff
 
 ## Adapt to an installation
 
-At the top of **both** the main script and the sunrise fade script, set the same `excluded_lights` list for broken or unwanted lights. In the main script, `pause_helpers` and `pause_automations` can pause a competing adaptation system. A listed automation is briefly stopped and re-enabled, so it must be gated by one of the listed helpers. The sunrise script's optional `resume_helpers` stay off during the fade and are turned on afterward. The repository defaults contain no household entity IDs or credentials.
+In the main script, sunrise fade script, nightly automation, and off-wins automation, set the same `excluded_lights` list for broken or unwanted lights. In the main script, `pause_helpers` and `pause_automations` can pause a competing adaptation system. A listed automation is briefly stopped and re-enabled, so it must be gated by one of the listed helpers. The sunrise script's optional `resume_helpers` stay off during the fade and are turned on afterward. The repository defaults contain no household entity IDs or credentials.
 
 Change `minutes: 30` in the automation's sunrise branch to adjust the fade duration (1–120 minutes). A manual **Stop Natural Candlelight** still settles lit bulbs at 80%; sunrise uses a separate stop path to avoid that brightness jump.
 
@@ -138,3 +141,18 @@ Ice Breath sends one shared frame to all selected on bulbs. Its white is a zero-
 Update Custom Lighting Patterns, then install `scripts/slow_turn_on.yaml` as **Slow Turn On**. Select bulbs and run it: each starts at 1% in warm white, then all selected still-on bulbs rise together to 80% over 10 seconds. The duration is adjustable from 5–30 seconds. It uses an eased monotonic brightness curve and 150 ms pacing with changed levels only; elapsed time sets the progress, so service latency does not accumulate into extra programmed fade time. Actual bulb response still depends on the integration.
 
 After reaching 80%, the script automatically hands off to the default Natural Candlelight controller. This handoff preserves current brightness and seeds the selected bulbs at 80%, avoiding the normal 50% startup reset. Candlelight brightness commands include supported warm-white color temperature to prevent a previous color mode from returning. Other eligible lit bulbs remain included; off bulbs stay off. This is a manually invoked script, not a new schedule or a house-wide automatic turn-on rule. It can also be called from an automation's actions.
+
+## Evening fade and off priority
+
+Install the registry, helper, off-priority script, resume script, and off-wins automation listed above. Update the candlelight, nightly, sunrise, and color controllers together. An off request records a persistent hold **before** candlelight restarts. Held bulbs are excluded from automatic candlelight and sunrise commands even if their cloud state incorrectly says on. The guard cancels indoor effect updates and reinforces the requested off command for three seconds; other lit, unheld bulbs can resume.
+
+The hold releases on a direct Home Assistant turn-on request, or an external off-to-on state transition after at least 30 seconds confirmed off. Immediate stale on feedback cannot clear it. If the integration never delivers an off state, use **Resume Automatic Lighting** for selected bulbs (empty selection clears all holds), then turn the lights on. This control clears holds without itself powering lights on. Holds are not automatically cleared nightly in this version.
+
+Optional `coupled_fixtures` lists in both Off Priority and Off Wins can link two bulbs sharing one dome: observing off on either pauses automatic effects on both. Only the specifically requested targets receive off commands. This can help when one bulb reports state unreliably. Leave empty for independent bulbs.
+
+The saved registry uses eight-character SHA256 prefixes, up to 31 simultaneous held bulbs. Updates are serialized. Capacity overflow, malformed state, or a detected prefix collision blocks all automatic lighting; clear all holds explicitly to recover. This is a state-management encoding, not a security feature.
+Newly switched-on bulbs are detected within the running candlelight controller, with a short debounce to gather bulbs in the same fixture. The ten-second fade temporarily pauses flicker updates elsewhere, then the normal model continues. A new on-state timestamp distinguishes another off/on cycle from ordinary brightness feedback. Recovery does not re-fade all lights that were already on. A bulb switched off during a fade is excluded from subsequent frames.
+
+Google/Tuya cloud state and commands can arrive asynchronously. Home Assistant can only record a hold once it receives an off action or off state (including a configured fixture partner). It cannot detect a voice command that never reaches any observed entity. A wall-powered bulb can briefly restore its firmware's previous level before the automatic fade starts.
+
+For rooms used on alternating weeks, configure `alternating_week_lights` and `alternating_week_start` identically in the main controller, nightly automation, and sunrise script. The example anchor is the local start of a present week in `YYYY-MM-DD HH:MM:SS` format; weeks then alternate present/absent. Calculations use local wall-clock dates, keeping the handoff time unchanged across daylight-saving transitions. Off-week bulbs remain manually controllable and are excluded from the automatic routine. Generic files contain no household schedule or room mappings.

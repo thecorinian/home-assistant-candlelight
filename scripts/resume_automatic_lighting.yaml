@@ -1,0 +1,18 @@
+alias: Resume Automatic Lighting
+description: Release manual-off holds for selected bulbs, or all holds if selection is empty. Does not turn
+  on a light; the normal evening routine can manage already-on or subsequently switched-on bulbs again.
+mode: queued
+fields:
+  lights:
+    name: Bulbs
+    description: Empty clears all manual-off holds.
+    selector:
+      entity:
+        filter:
+          domain: light
+        multiple: true
+sequence:
+- action: script.lighting_manual_off_registry
+  data:
+    lights: '{{ lights|default([]) }}'
+    operation: '{{ ''release'' if lights|default([])|count>0 else ''clear_all'' }}'

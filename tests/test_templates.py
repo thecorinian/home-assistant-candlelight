@@ -1,5 +1,6 @@
 """Exercise the shipped Jinja templates without connecting to any lights."""
 import ast
+import hashlib
 import math
 import random
 from pathlib import Path
@@ -8,6 +9,9 @@ import unittest
 import yaml
 from jinja2.nativetypes import NativeEnvironment
 from jinja2 import pass_context
+
+class StateStore(NS):
+ def __call__(self,entity):return '' if entity=='input_text.lighting_manual_off' else 'unknown'
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = yaml.safe_load((ROOT / 'scripts/natural_candlelight.yaml').read_text())
@@ -22,9 +26,10 @@ class Templates(unittest.TestCase):
  def setUp(self):
   self.lights=[bulb('a'),bulb('b','off'),bulb('dead','unavailable'),bulb('switch',modes=['onoff'])]
   self.env=NativeEnvironment()
+  self.env.filters['sha256']=lambda value:hashlib.sha256(value.encode()).hexdigest()
   self.env.filters['bool']=lambda value: str(value).lower() in ('true','on','yes','1','enable')
   self.compiled={}
-  self.env.globals.update(sin=math.sin,log=math.log,states=NS(light=self.lights),as_timestamp=lambda x:x,now=lambda:0,
+  self.env.globals.update(sin=math.sin,log=math.log,states=StateStore(light=self.lights),as_timestamp=lambda x:x,now=lambda:0,
    expand=lambda ids:[x for x in self.lights if x.entity_id in ids])
  def render(self,t,**kw):
   if t not in self.compiled: self.compiled[t]=self.env.from_string(t)
@@ -89,7 +94,7 @@ class Templates(unittest.TestCase):
    return entity=='light.a' and state=='on'
   self.env.globals['is_state']=is_state
   self.env.tests['is_state']=is_state
-  args=dict(started=0,run_minutes=0,bulbs=['light.a'],cohort=['light.a'],repeat=NS(item='light.a'))
+  args=dict(started=0,run_minutes=0,bulbs=['light.a'],cohort=['light.a'],fade_bulbs=['light.a'],repeat=NS(item='light.a'))
   self.env.globals['now']=lambda:12*3600
   for t in templates:
    self.assertTrue(self.render(t,**args))

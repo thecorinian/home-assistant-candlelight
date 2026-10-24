@@ -100,7 +100,8 @@ variables:
 sequence:
 - condition: template
   value_template: '{{ not is_state(''script.sunrise_fade_off'',''on'') and not is_state(trial_script,''on'')
-    and not is_state(''script.synchronized_color_cycle'',''on'') }}'
+    and not is_state(''script.synchronized_color_cycle'',''on'') and not is_state(''script.lighting_off_priority'',''on'')
+    }}'
 - variables:
     requested: '{{ [lights] if lights is defined and lights is string else lights|default([],true) }}'
     only_lit: '{{ only_on | default(false) | bool }}'

@@ -1,6 +1,6 @@
 alias: Synchronized Color Cycle
-description: Approved smooth synchronized color cycle. One-degree steps, 150 ms pacing, 65% brightness and 85% saturation.
-  Select bulbs; zero minutes runs until Stop Synchronized Color Cycle or sunrise.
+description: Approved smooth synchronized color cycle. One-degree steps, 150 ms pacing, 65% brightness and 85%
+  saturation. Select bulbs; zero minutes runs until Stop Synchronized Color Cycle or sunrise.
 icon: mdi:palette
 mode: single
 fields:
@@ -39,8 +39,9 @@ variables:
   trial_script: script.candlelight_wind_trial
 sequence:
 - condition: template
-  value_template: '{{ not is_state(''script.sunrise_fade_off'',''on'') and not is_state(trial_script,''on'') and
-    not is_state(''script.custom_lighting_patterns'',''on'') }}'
+  value_template: '{{ not is_state(''script.sunrise_fade_off'',''on'') and not is_state(trial_script,''on'')
+    and not is_state(''script.custom_lighting_patterns'',''on'') and not is_state(''script.lighting_off_priority'',''on'')
+    }}'
 - variables:
     requested: '{{ lights | default([], true) }}'
     only_lit: '{{ only_on | default(false) | bool }}'
@@ -48,18 +49,18 @@ sequence:
 - variables:
     bulbs: "{% set ns=namespace(ids=[]) %} {% for s in expand(requested) %} {% set modes=s.attributes.get('supported_color_modes',[])\
       \ or [] %} {% if s.domain == 'light' and s.state in ['on','off']\n  and s.entity_id not in excluded_lights\n\
-      \  and (not only_lit or s.state == 'on')\n  and modes | select('in',['hs','rgb','rgbw','rgbww','xy']) | list\
-      \ | count > 0 %}\n{% set ns.ids=ns.ids+[s.entity_id] %} {% endif %}{% endfor %}{{ ns.ids | unique | sort |\
-      \ list }}"
+      \  and (not only_lit or s.state == 'on')\n  and modes | select('in',['hs','rgb','rgbw','rgbww','xy'])\
+      \ | list | count > 0 %}\n{% set ns.ids=ns.ids+[s.entity_id] %} {% endif %}{% endfor %}{{ ns.ids | unique\
+      \ | sort | list }}"
 - condition: template
   value_template: '{{ bulbs | count > 0 }}'
 - variables:
     candle_was_on: '{{ is_state(''script.natural_candlelight'',''on'') }}'
     helpers_to_resume: '{{ pause_helpers | select(''is_state'',''on'') | list }}'
     automations_to_resume: '{{ pause_automations | select(''is_state'',''on'') | list }}'
-    paused_color_scripts: '{% set ns=namespace(items=[]) %} {% for item in competing_color_scripts %} {% if is_state(item.entity_id,''on'')
-      and item.lights | select(''in'',bulbs) | list | count > 0 %} {% set ns.items=ns.items+[item] %} {% endif %}{%
-      endfor %}{{ ns.items }}'
+    paused_color_scripts: '{% set ns=namespace(items=[]) %} {% for item in competing_color_scripts %} {% if
+      is_state(item.entity_id,''on'') and item.lights | select(''in'',bulbs) | list | count > 0 %} {% set ns.items=ns.items+[item]
+      %} {% endif %}{% endfor %}{{ ns.items }}'
 - action: input_boolean.turn_on
   target:
     entity_id: input_boolean.synchronized_color_cycle_active
@@ -100,8 +101,8 @@ sequence:
     target:
       entity_id: input_boolean.natural_candlelight_active
   - variables:
-      other_lights: '{{ states.light | selectattr(''state'',''eq'',''on'') | map(attribute=''entity_id'') | reject(''in'',bulbs)
-        | list }}'
+      other_lights: '{{ states.light | selectattr(''state'',''eq'',''on'') | map(attribute=''entity_id'') |
+        reject(''in'',bulbs) | list }}'
   - if:
     - condition: template
       value_template: '{{ other_lights | count > 0 }}'
@@ -138,8 +139,8 @@ sequence:
 - repeat:
     while:
     - condition: template
-      value_template: '{{ is_state(''input_boolean.synchronized_color_cycle_active'',''on'') and ((run_minutes |
-        float) == 0 or as_timestamp(now()) - (started | float) < (run_minutes | float)*60) and bulbs | select(''is_state'',''on'')
+      value_template: '{{ is_state(''input_boolean.synchronized_color_cycle_active'',''on'') and ((run_minutes
+        | float) == 0 or as_timestamp(now()) - (started | float) < (run_minutes | float)*60) and bulbs | select(''is_state'',''on'')
         | list | count > 0 }}'
     sequence:
     - variables:
@@ -172,10 +173,10 @@ sequence:
         continue_on_error: true
         target:
           entity_id: '{{ repeat.item }}'
-        data: '{% set modes=state_attr(repeat.item,''supported_color_modes'') or [] %} {% if ''color_temp'' in modes
-          %} {% set lo=state_attr(repeat.item,''min_color_temp_kelvin'') | int(2000) %} {% set hi=state_attr(repeat.item,''max_color_temp_kelvin'')
-          | int(6500) %} {{ {''brightness_pct'':50, ''color_temp_kelvin'':[lo,[2000,hi]|min]|max} }} {% else %}{{
-          {''brightness_pct'':50, ''hs_color'':[30,35]} }}{% endif %}'
+        data: '{% set modes=state_attr(repeat.item,''supported_color_modes'') or [] %} {% if ''color_temp''
+          in modes %} {% set lo=state_attr(repeat.item,''min_color_temp_kelvin'') | int(2000) %} {% set hi=state_attr(repeat.item,''max_color_temp_kelvin'')
+          | int(6500) %} {{ {''brightness_pct'':50, ''color_temp_kelvin'':[lo,[2000,hi]|min]|max} }} {% else
+          %}{{ {''brightness_pct'':50, ''hs_color'':[30,35]} }}{% endif %}'
 - if:
   - condition: template
     value_template: '{{ candle_was_on }}'

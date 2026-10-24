@@ -1,6 +1,6 @@
 alias: Sunrise Fade Off
-description: 'At local sunrise, stop candlelight without a brightness jump and gradually fade currently-on eligible
-  lights to off. Default fade: 30 minutes.'
+description: 'At local sunrise, stop candlelight without a brightness jump and gradually fade currently-on
+  eligible lights to off. Default fade: 30 minutes.'
 icon: mdi:weather-sunset-up
 mode: single
 fields:
@@ -32,6 +32,8 @@ variables:
   - script.candlelight_wind_trial
   - script.synchronized_color_cycle
   - script.custom_lighting_patterns
+  alternating_week_lights: []
+  alternating_week_start: '2026-01-02 16:00:00'
 sequence:
 - variables:
     running_controllers: '{{ controllers | select(''is_state'', ''on'') | list }}'
@@ -63,7 +65,12 @@ sequence:
     requested: '{{ lights | default([], true) }}'
     fade_seconds: '{{ [1, [120, minutes | default(30) | float(30)] | min] | max * 60 }}'
 - variables:
-    bulbs: '{% set ns=namespace(ids=[]) %}
+    bulbs: '{% set held=states(''input_text.lighting_manual_off'') %}{% set hold_valid=held not in [''*'',''unknown'',''unavailable'']
+      and held|length % 8 == 0 %}{% set present=true %}{% if alternating_week_lights|default([])|count>0 %}{%
+      set anchor=strptime(alternating_week_start|default(''2026-01-02 16:00:00''),''%Y-%m-%d %H:%M:%S'') %}{%
+      set present=((now().replace(tzinfo=None)-anchor).days // 7) % 2 == 0 %}{% endif %}
+
+      {% set ns=namespace(ids=[]) %}
 
       {% set source=expand(requested) if requested | count > 0 else states.light %}
 
@@ -71,8 +78,9 @@ sequence:
 
       {% set modes=s.attributes.get(''supported_color_modes'', []) or [] %}
 
-      {% if s.state == ''on'' and s.entity_id not in excluded_lights and modes | reject(''in'', [''onoff'',''unknown''])
-      | list | count > 0 %}
+      {% if s.state == ''on'' and s.entity_id not in excluded_lights and hold_valid and (s.entity_id|sha256)[:8]
+      not in held and (s.entity_id not in (alternating_week_lights|default([])) or present) and modes | reject(''in'',
+      [''onoff'',''unknown'']) | list | count > 0 %}
 
       {% set ns.ids=ns.ids+[s.entity_id] %}
 
@@ -84,8 +92,8 @@ sequence:
 - repeat:
     while:
     - condition: template
-      value_template: '{{ as_timestamp(now()) - (started | float) < (fade_seconds | float) and expand(bulbs) | selectattr(''state'',''eq'',''on'')
-        | list | count > 0 }}'
+      value_template: '{{ as_timestamp(now()) - (started | float) < (fade_seconds | float) and expand(bulbs)
+        | selectattr(''state'',''eq'',''on'') | list | count > 0 }}'
     sequence:
     - repeat:
         for_each: '{{ bulbs }}'
@@ -95,8 +103,8 @@ sequence:
             value_template: '{{ is_state(repeat.item, ''on'') }}'
           then:
           - variables:
-              level: '{% set u=[0.0, [1.0, (as_timestamp(now()) - (started | float)) / (fade_seconds | float)] |
-                min] | max %}
+              level: '{% set u=[0.0, [1.0, (as_timestamp(now()) - (started | float)) / (fade_seconds | float)]
+                | min] | max %}
 
                 {% set remaining=1 - u*u*(3-2*u) %}
 
@@ -104,8 +112,8 @@ sequence:
                 | float(255)] | min | round(0, ''floor'') | int] | max }}'
           - if:
             - condition: template
-              value_template: '{{ is_state(repeat.item,''on'') and (state_attr(repeat.item,''brightness'') | int(255))
-                > (level | int) }}'
+              value_template: '{{ is_state(repeat.item,''on'') and (state_attr(repeat.item,''brightness'')
+                | int(255)) > (level | int) }}'
             then:
             - action: light.turn_on
               continue_on_error: true
@@ -114,8 +122,8 @@ sequence:
               data:
                 brightness: '{{ level | int }}'
     - delay:
-        seconds: '{{ [0.1, [15, (fade_seconds | float) - (as_timestamp(now()) - (started | float))] | min] | max
-          }}'
+        seconds: '{{ [0.1, [15, (fade_seconds | float) - (as_timestamp(now()) - (started | float))] | min]
+          | max }}'
 - repeat:
     count: 3
     sequence:
