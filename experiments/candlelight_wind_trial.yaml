@@ -1,7 +1,6 @@
 alias: Candlelight Wind Trial
-description: 'Timed candle-gust experiment: mixed single dips and triplets, with a mandatory quick 90–100% rebound after
-  each low-baseline hold. Softer settling, fewer sustained bright periods, fixed warm white; restores normal candlelight
-  afterward.'
+description: 'Timed candle-gust experiment: continuous staggered flutter, longer low holds, brief bright peaks,
+  and paced background commands. Fixed warm white; restores normal candlelight afterward.'
 icon: mdi:candle
 mode: single
 fields:
@@ -32,7 +31,8 @@ variables:
   trial_script_entity: script.candlelight_wind_trial
 sequence:
 - condition: template
-  value_template: '{{ is_state(''script.natural_candlelight'', ''on'') and lights | default([], true) | count > 0 }}'
+  value_template: '{{ is_state(''script.natural_candlelight'', ''on'') and lights | default([], true) | count >
+    0 }}'
 - variables:
     requested: '{{ lights | default([], true) }}'
     run_minutes: '{{ [1, [60, minutes | default(3, true) | int(3)] | min] | max }}'
@@ -41,10 +41,11 @@ sequence:
     seed: '{{ (range(0, 62832) | random) / 10000 }}'
 - variables:
     bulbs: "{% set out = namespace(ids=[]) %}\n{% set source = expand(requested) if requested | count > 0 else states.light\
-      \ %}\n{% for s in source %}\n  {% set modes = s.attributes.get('supported_color_modes', []) or [] %}\n  {% if s.domain\
-      \ == 'light' and s.state in ['on', 'off'] and s.entity_id not in excluded_lights\n        and modes | reject('in',\
-      \ ['onoff', 'unknown']) | list | count > 0\n        and (not only_lit or s.state == 'on') %}\n    {% set out.ids\
-      \ = out.ids + [s.entity_id] %}\n  {% endif %}\n{% endfor %}\n{{ out.ids | unique | sort | list }}"
+      \ %}\n{% for s in source %}\n  {% set modes = s.attributes.get('supported_color_modes', []) or [] %}\n  {%\
+      \ if s.domain == 'light' and s.state in ['on', 'off'] and s.entity_id not in excluded_lights\n        and\
+      \ modes | reject('in', ['onoff', 'unknown']) | list | count > 0\n        and (not only_lit or s.state == 'on')\
+      \ %}\n    {% set out.ids = out.ids + [s.entity_id] %}\n  {% endif %}\n{% endfor %}\n{{ out.ids | unique |\
+      \ sort | list }}"
 - if:
   - condition: template
     value_template: '{{ bulbs | count == 0 }}'
@@ -111,10 +112,10 @@ sequence:
       continue_on_error: true
       target:
         entity_id: '{{ repeat.item }}'
-      data: "{% set modes = state_attr(repeat.item, 'supported_color_modes') or [] %} {% if 'color_temp' in modes %}\n\
-        \  {% set low = state_attr(repeat.item, 'min_color_temp_kelvin') | int(2000) %}\n  {% set high = state_attr(repeat.item,\
-        \ 'max_color_temp_kelvin') | int(6500) %}\n  {{ {'color_temp_kelvin': [low, [2000, high] | min] | max} }}\n{%\
-        \ else %}\n  {{ {} }}\n{% endif %}"
+      data: "{% set modes = state_attr(repeat.item, 'supported_color_modes') or [] %} {% if 'color_temp' in modes\
+        \ %}\n  {% set low = state_attr(repeat.item, 'min_color_temp_kelvin') | int(2000) %}\n  {% set high = state_attr(repeat.item,\
+        \ 'max_color_temp_kelvin') | int(6500) %}\n  {{ {'color_temp_kelvin': [low, [2000, high] | min] | max} }}\n\
+        {% else %}\n  {{ {} }}\n{% endif %}"
 - delay:
     milliseconds: 500
 - repeat:
@@ -129,35 +130,36 @@ sequence:
         target:
           entity_id: '{{ repeat.item }}'
         data:
-          brightness_pct: 70
+          brightness_pct: 50
 - variables:
     started: '{{ as_timestamp(now()) }}'
     gust_events: []
     prepared_bulbs: '{{ bulbs }}'
-    baseline_from: 70
-    baseline_target: 70
+    baseline_from: 50
+    baseline_target: 50
     baseline_changed: 0
-    baseline_next: '{{ range(30, 181) | random }}'
+    baseline_next: '{{ range(45, 151) | random }}'
     baseline_blend_seconds: 20
     last_levels: {}
     last_times: {}
     wind_next: '{{ range(8, 15) | random }}'
     leaving_low: false
     rebound_peak: 95
+    flame_order: '{{ states.light | map(attribute=''entity_id'') | sort | list }}'
 - repeat:
     while:
     - condition: template
       value_template: '{{ is_state(trial_script_entity, ''on'') and ((run_minutes | float) == 0 or as_timestamp(now())
-        - (started | float) < (run_minutes | float)*60) and expand(bulbs) | selectattr(''state'',''eq'',''on'') | list
-        | count > 0 }}'
+        - (started | float) < (run_minutes | float)*60) and expand(bulbs) | selectattr(''state'',''eq'',''on'')
+        | list | count > 0 }}'
     sequence:
     - variables:
-        bulbs: "{% set out = namespace(ids=[]) %}\n{% set source = expand(requested) if requested | count > 0 else states.light\
-          \ %}\n{% for s in source %}\n  {% set modes = s.attributes.get('supported_color_modes', []) or [] %}\n  {%\
-          \ if s.domain == 'light' and s.state in ['on', 'off'] and s.entity_id not in excluded_lights\n        and modes\
-          \ | reject('in', ['onoff', 'unknown']) | list | count > 0\n        and (not only_lit or s.state == 'on') %}\n\
-          \    {% set out.ids = out.ids + [s.entity_id] %}\n  {% endif %}\n{% endfor %}\n{{ out.ids | unique | sort |\
-          \ list }}"
+        bulbs: "{% set out = namespace(ids=[]) %}\n{% set source = expand(requested) if requested | count > 0 else\
+          \ states.light %}\n{% for s in source %}\n  {% set modes = s.attributes.get('supported_color_modes', [])\
+          \ or [] %}\n  {% if s.domain == 'light' and s.state in ['on', 'off'] and s.entity_id not in excluded_lights\n\
+          \        and modes | reject('in', ['onoff', 'unknown']) | list | count > 0\n        and (not only_lit\
+          \ or s.state == 'on') %}\n    {% set out.ids = out.ids + [s.entity_id] %}\n  {% endif %}\n{% endfor %}\n\
+          {{ out.ids | unique | sort | list }}"
     - variables:
         prepared_bulbs: '{{ prepared_bulbs | select(''in'', bulbs) | select(''is_state'', ''on'') | list }}'
     - variables:
@@ -169,10 +171,12 @@ sequence:
       - variables:
           leaving_low: '{{ (baseline_target | float) <= 50 }}'
           baseline_from: '{{ baseline_target }}'
-          baseline_target: '{{ ([70, 70, 80] if leaving_low else [50, 50, 50, 70, 70, 80, 80]) | random }}'
+          baseline_target: '{{ ([70, 70, 70, 80] if leaving_low else ([50, 50, 70] if (baseline_from | int) == 80
+            else [50, 50, 50, 80])) | random }}'
           baseline_changed: '{{ elapsed }}'
-          baseline_blend_seconds: '{{ (range(4, 8) if leaving_low else range(15, 31)) | random }}'
-          baseline_next: '{{ (elapsed | float) + (baseline_blend_seconds | float) + (range(30, 181) | random) }}'
+          baseline_blend_seconds: '{{ (range(2, 5) if leaving_low else range(10, 21)) | random }}'
+          baseline_next: '{{ (elapsed | float) + (baseline_blend_seconds | float) + ((range(10, 21) if (baseline_target
+            | int) == 80 else (range(30, 76) if (baseline_target | int) == 70 else range(45, 151))) | random) }}'
           rebound_peak: '{{ range(90, 101) | random }}'
       - if:
         - condition: template
@@ -181,8 +185,8 @@ sequence:
         - repeat:
             for_each: '{% set ns=namespace(total=0.0, count=0) %}
 
-              {% for id in bulbs %}{% if id in last_levels %}{% set ns.total=ns.total+(last_levels[id] | float) %}{%
-              set ns.count=ns.count+1 %}{% endif %}{% endfor %}
+              {% for id in bulbs %}{% if id in last_levels %}{% set ns.total=ns.total+(last_levels[id] | float)
+              %}{% set ns.count=ns.count+1 %}{% endif %}{% endfor %}
 
               {% set current = ns.total/ns.count if ns.count > 0 else 50 %}
 
@@ -191,8 +195,8 @@ sequence:
             - if:
               - condition: template
                 value_template: '{{ is_state(trial_script_entity, ''on'') and as_timestamp(now()) - (started | float)
-                  < (run_minutes | float)*60 and expand(bulbs) | selectattr(''state'', ''eq'', ''on'') | list | count
-                  > 0 }}'
+                  < (run_minutes | float)*60 and expand(bulbs) | selectattr(''state'', ''eq'', ''on'') | list |
+                  count > 0 }}'
               then:
               - action: light.turn_on
                 continue_on_error: true
@@ -204,14 +208,14 @@ sequence:
               - delay:
                   milliseconds: '{{ [120, 150, 180] | random }}'
         - delay:
-            milliseconds: '{{ [400, 500, 650] | random }}'
+            milliseconds: '{{ [250, 350, 450] | random }}'
         - variables:
             baseline_from: '{{ rebound_peak }}'
             baseline_changed: '{{ as_timestamp(now()) - (started | float) }}'
             baseline_next: '{{ (baseline_next | float) + as_timestamp(now()) - (started | float) - (elapsed | float)
               }}'
-            wind_next: '{{ [wind_next | float, as_timestamp(now()) - (started | float) + (range(15, 26) | random)] |
-              max }}'
+            wind_next: '{{ [wind_next | float, as_timestamp(now()) - (started | float) + (range(15, 26) | random)]
+              | max }}'
             gust_events: []
             last_levels: '{% set ns=namespace(items=[]) %}{% for id in bulbs %}{% set ns.items=ns.items+[(id, rebound_peak
               | float)] %}{% endfor %}{{ dict(ns.items) }}'
@@ -236,24 +240,25 @@ sequence:
           count: '{{ pulse_count }}'
           sequence:
           - variables:
-              dip_level: '{% set fraction = (range(20, 41) | random) if (pulse_count | int) == 1 else (range(25, 61)
-                | random) %}
+              dip_level: '{% set fraction = (range(20, 41) | random) if (pulse_count | int) == 1 else (range(25,
+                61) | random) %}
 
                 {{ [20, (burst_baseline | float) * fraction / 100] | max }}'
-              recovery_level: "{% if (pulse_count | int) == 1 %}\n  {% set lift = range(-3, 5) | random %}\n{% elif (range(0,\
-                \ 5) | random) == 0 %}\n  {% set lift = range(10, 31) | random %}\n{% else %}\n  {% set lift = range(-4,\
-                \ 11) | random %}\n{% endif %}\n{{ [20, [100, (burst_baseline | float) + lift] | min] | max }}"
+              recovery_level: "{% if (pulse_count | int) == 1 %}\n  {% set lift = range(-3, 5) | random %}\n{% elif\
+                \ (range(0, 5) | random) == 0 %}\n  {% set lift = range(10, 31) | random %}\n{% else %}\n  {% set\
+                \ lift = range(-4, 11) | random %}\n{% endif %}\n{{ [20, [100, (burst_baseline | float) + lift]\
+                \ | min] | max }}"
           - repeat:
-              for_each: '{% set a = burst_level | float %}{% set d = dip_level | float %}{% set r = recovery_level |
-                float %}
+              for_each: '{% set a = burst_level | float %}{% set d = dip_level | float %}{% set r = recovery_level
+                | float %}
 
                 {{ [a+(d-a)/3, a+2*(d-a)/3, d, d+(r-d)/3, d+2*(r-d)/3, r] }}'
               sequence:
               - if:
                 - condition: template
-                  value_template: '{{ is_state(trial_script_entity, ''on'') and as_timestamp(now()) - (started | float)
-                    < (run_minutes | float)*60 and expand(bulbs) | selectattr(''state'', ''eq'', ''on'') | list | count
-                    > 0 }}'
+                  value_template: '{{ is_state(trial_script_entity, ''on'') and as_timestamp(now()) - (started |
+                    float) < (run_minutes | float)*60 and expand(bulbs) | selectattr(''state'', ''eq'', ''on'')
+                    | list | count > 0 }}'
                 then:
                 - action: light.turn_on
                   continue_on_error: true
@@ -263,15 +268,16 @@ sequence:
                   data:
                     brightness_pct: '{{ repeat.item | round | int }}'
                 - delay:
-                    milliseconds: '{{ ([130, 150, 175] if (pulse_count | int) == 1 else [150, 175, 200]) | random }}'
+                    milliseconds: '{{ ([130, 150, 175] if (pulse_count | int) == 1 else [150, 175, 200]) | random
+                      }}'
           - variables:
               burst_level: '{{ recovery_level }}'
           - delay:
               milliseconds: '{{ [200, 300, 450, 650] | random }}'
       - variables:
           wind_next: '{{ as_timestamp(now()) - (started | float) + (range(40, 101) | random) }}'
-          gust_events: '{% if (pulse_count | int) == 1 %}{{ [] }}{% else %}{{ [[as_timestamp(now()) - (started | float),
-            range(30, 51) | random, (range(20, 31) | random)/10, range(0,10000) | random]] }}{% endif %}'
+          gust_events: '{% if (pulse_count | int) == 1 %}{{ [] }}{% else %}{{ [[as_timestamp(now()) - (started |
+            float), range(30, 51) | random, (range(20, 31) | random)/10, range(0,10000) | random]] }}{% endif %}'
           last_levels: '{% set ns=namespace(items=[]) %}{% for id in bulbs %}{% set ns.items=ns.items+[(id, burst_level
             | float)] %}{% endfor %}{{ dict(ns.items) }}'
           last_times: '{% set ns=namespace(items=[]) %}{% for id in bulbs %}{% set ns.items=ns.items+[(id, as_timestamp(now())
@@ -281,8 +287,9 @@ sequence:
         sequence:
         - if:
           - condition: template
-            value_template: "{{ is_state(trial_script_entity, 'on')\n   and is_state(repeat.item, 'on')\n   and ((run_minutes\
-              \ | float) == 0 or\n        as_timestamp(now()) - (started | float) < (run_minutes | float)*60) }}"
+            value_template: "{{ is_state(trial_script_entity, 'on')\n   and is_state(repeat.item, 'on')\n   and\
+              \ ((run_minutes | float) == 0 or\n        as_timestamp(now()) - (started | float) < (run_minutes |\
+              \ float)*60) }}"
           then:
           - if:
             - condition: template
@@ -292,14 +299,28 @@ sequence:
               continue_on_error: true
               target:
                 entity_id: '{{ repeat.item }}'
-              data: "{% set modes = state_attr(repeat.item, 'supported_color_modes') or [] %} {% if 'color_temp' in modes\
-                \ %}\n  {% set low = state_attr(repeat.item, 'min_color_temp_kelvin') | int(2000) %}\n  {% set high =\
-                \ state_attr(repeat.item, 'max_color_temp_kelvin') | int(6500) %}\n  {{ {'color_temp_kelvin': [low, [2000,\
-                \ high] | min] | max} }}\n{% else %}\n  {{ {} }}\n{% endif %}"
+              data: "{% set modes = state_attr(repeat.item, 'supported_color_modes') or [] %} {% if 'color_temp'\
+                \ in modes %}\n  {% set low = state_attr(repeat.item, 'min_color_temp_kelvin') | int(2000) %}\n\
+                \  {% set high = state_attr(repeat.item, 'max_color_temp_kelvin') | int(6500) %}\n  {{ {'color_temp_kelvin':\
+                \ [low, [2000, high] | min] | max} }}\n{% else %}\n  {{ {} }}\n{% endif %}"
             - delay:
                 milliseconds: 500
             - variables:
                 prepared_bulbs: '{{ prepared_bulbs + [repeat.item] }}'
+    - repeat:
+        for_each: '{{ range(0, 3) | list }}'
+        sequence:
+        - variables:
+            cohort: "{% set ns=namespace(ids=[]) %}\n{% for id in bulbs %}\n  {% if id in flame_order and (flame_order.index(id)\
+              \ % 3) == (repeat.item | int) and is_state(id, 'on') %}\n    {% set ns.ids=ns.ids+[id] %}\n  {% endif\
+              \ %}\n{% endfor %}\n{{ ns.ids }}"
+        - if:
+          - condition: template
+            value_template: '{{ is_state(trial_script_entity, ''on'') and as_timestamp(now()) - (started | float)
+              < (run_minutes | float)*60 and cohort | select(''is_state'', ''on'') | list | count > 0 }}'
+          then:
+          - variables:
+              flame_id: '{{ cohort[0] }}'
           - variables:
               baseline: '{% set age = as_timestamp(now()) - (started | float) - (baseline_changed | float) %}
 
@@ -309,38 +330,40 @@ sequence:
 
                 {{ (baseline_from | float) + ((baseline_target | float) - (baseline_from | float))*blend }}'
           - variables:
-              raw_level: "{% set t = as_timestamp(now()) - (started | float) %} {% set all_ids = states.light | map(attribute='entity_id')\
-                \ | sort | list %}\n{% set i = all_ids.index(repeat.item) %} {% set p = (seed | float) + i * 2.39996\
-                \ %} {% set envelope = 0.35 + 0.65 * (sin(0.17*t + (seed | float)) ** 2) %} {% set turbulence = envelope\
-                \ * (3.6*sin(0.61*t+p) + 2.4*sin(1.13*t+1.9*p) + 1.6*sin(1.97*t+0.7*p) + 0.8*sin(2.3*t+2.4*p)) %} {%\
-                \ set wander = 4*sin(0.075*t+p) + 2*sin(0.19*t+1.7*p) %} {% set response = namespace(value=0.0) %} {%\
-                \ for event in gust_events %}\n  {% set tau = (t - event[0] - i*0.31) / event[2] %}\n  {% if tau >= 0\
-                \ and tau < 9 %}\n    {% set coupling = 0.8 + 0.2*(sin(p+event[3]*1.7) ** 2) %}\n    {% set onset = [1.0,\
-                \ tau / 0.35] | min %}\n    {% set smooth_onset = onset*onset*(3 - 2*onset) %}\n    {% set response.value\
-                \ = response.value - event[1] * coupling * smooth_onset * (2.718281828 ** (-0.85*tau)) * sin(2.5*tau)\
-                \ %}\n  {% endif %}\n{% endfor %}\n{{ [20, [100, ((baseline | float) + turbulence + wander + response.value)\
-                \ | round | int] | min] | max }}"
+              raw_level: "{% set t = as_timestamp(now()) - (started | float) %} {% set all_ids = states.light |\
+                \ map(attribute='entity_id') | sort | list %}\n{% set i = all_ids.index(flame_id) %} {% set p =\
+                \ (seed | float) + i * 2.39996 %} {% set envelope = 0.65 + 0.35 * (sin(0.17*t + (seed | float))\
+                \ ** 2) %} {% set turbulence = envelope * (4.5*sin(1.1*t+p) + 3.2*sin(2.17*t+1.9*p) + 2.2*sin(3.71*t+0.7*p)\
+                \ + 1.4*sin(5.3*t+2.4*p)) %} {% set wander = 4*sin(0.075*t+p) + 2*sin(0.19*t+1.7*p) %} {% set response\
+                \ = namespace(value=0.0) %} {% for event in gust_events %}\n  {% set tau = (t - event[0] - i*0.31)\
+                \ / event[2] %}\n  {% if tau >= 0 and tau < 9 %}\n    {% set coupling = 0.8 + 0.2*(sin(p+event[3]*1.7)\
+                \ ** 2) %}\n    {% set onset = [1.0, tau / 0.35] | min %}\n    {% set smooth_onset = onset*onset*(3\
+                \ - 2*onset) %}\n    {% set response.value = response.value - event[1] * coupling * smooth_onset\
+                \ * (2.718281828 ** (-0.85*tau)) * sin(2.5*tau) %}\n  {% endif %}\n{% endfor %}\n{{ [20, [100, ((baseline\
+                \ | float) + turbulence + wander + response.value) | round | int] | min] | max }}"
           - variables:
               level: '{% set t = as_timestamp(now()) - (started | float) %}
 
-                {% set previous = last_levels.get(repeat.item, 70) | float %}
+                {% set previous = last_levels.get(flame_id, 50) | float %}
 
-                {% set dt = [0.0, t - (last_times.get(repeat.item, 0) | float)] | max %}
+                {% set dt = [0.0, t - (last_times.get(flame_id, 0) | float)] | max %}
 
-                {% set alpha = 1 - 2.718281828 ** (-dt / 1.3) %}
+                {% set alpha = 1 - 2.718281828 ** (-dt / 1.0) %}
 
                 {{ [20, [100, (previous + alpha*((raw_level | float)-previous)) | round | int] | min] | max }}'
           - action: light.turn_on
             continue_on_error: true
             target:
-              entity_id: '{{ repeat.item }}'
+              entity_id: '{{ cohort | select(''is_state'', ''on'') | list }}'
             data:
               brightness_pct: '{{ level | int }}'
           - variables:
-              last_levels: '{{ dict(last_levels, **{repeat.item: level | float}) }}'
-              last_times: '{{ dict(last_times, **{repeat.item: as_timestamp(now()) - (started | float)}) }}'
+              last_levels: '{% set ns=namespace(items=[]) %}{% for id in cohort %}{% set ns.items=ns.items+[(id,
+                level | float)] %}{% endfor %}{{ dict(last_levels, **dict(ns.items)) }}'
+              last_times: '{% set ns=namespace(items=[]) %}{% for id in cohort %}{% set ns.items=ns.items+[(id,
+                as_timestamp(now()) - (started | float))] %}{% endfor %}{{ dict(last_times, **dict(ns.items)) }}'
           - delay:
-              milliseconds: '{{ [125, 150, 175, 200] | random }}'
+              milliseconds: '{{ [500, (cohort | count) * 100] | max }}'
 - action: script.stop_natural_candlelight
 - wait_template: '{{ is_state(''script.natural_candlelight'', ''off'') }}'
   timeout: 00:00:30
