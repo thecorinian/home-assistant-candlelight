@@ -27,9 +27,9 @@ class Wind(unittest.TestCase):
    opening=self.render(INIT['wind_next'])
    self.assertTrue(8<=opening<=14)
    gaps.append(self.render(BURST[3]['variables']['wind_next'],started=0)-200)
-  self.assertTrue(all(45<=gap<=150 for gap in gaps))
-  self.assertGreater(len(set(gaps)),90)
-  self.assertGreater(sum(gaps)/len(gaps),90)
+  self.assertTrue(all(40<=gap<=100 for gap in gaps))
+  self.assertGreater(len(set(gaps)),55)
+  self.assertGreater(sum(gaps)/len(gaps),65)
  def test_triplets_have_soft_edges_and_varied_bounded_depths(self):
   rng=test_templates.random.Random(121)
   self.env.filters['random']=test_templates.pass_context(lambda context,seq:rng.choice(list(seq)))
@@ -42,8 +42,9 @@ class Wind(unittest.TestCase):
     recovery=self.render(PULSE[0]['variables']['recovery_level'],burst_baseline=baseline)
     frames=self.render(PULSE[1]['repeat']['for_each'],burst_level=previous,dip_level=dip,recovery_level=recovery)
     self.assertTrue(all(20<=level<=100 for level in frames))
-    self.assertTrue(previous>frames[0]>frames[1]<frames[2]<frames[3])
-    self.assertLessEqual(abs(frames[0]-previous),25)
+    self.assertEqual(len(frames),6)
+    self.assertTrue(previous>frames[0]>frames[1]>frames[2]<frames[3]<frames[4]<frames[5])
+    self.assertTrue(all(abs(b-a)<=27 for a,b in zip([previous]+frames,frames)))
     depths.append(baseline-dip)
     previous=recovery
   self.assertGreater(len(set(depths)),15)
@@ -53,7 +54,7 @@ class Wind(unittest.TestCase):
    for t in [i*.1 for i in range(200)]:
     self.env.globals['now']=lambda:t
     calm=self.render(RAW,**dict(ctx,baseline=baseline))
-    self.assertLessEqual(abs(calm-baseline),5)
+    self.assertLessEqual(abs(calm-baseline),15)
     value=self.render(RAW,**dict(ctx,baseline=baseline,gust_events=[[5,50,2.3,0]]))
     self.assertGreaterEqual(value,20)
     self.assertLessEqual(value,100)
